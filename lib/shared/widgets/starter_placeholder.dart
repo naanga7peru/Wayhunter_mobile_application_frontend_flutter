@@ -1,34 +1,33 @@
 import 'package:flutter/material.dart';
+import 'package:wayhunter_mobile/core/widgets/wayhunter_states.dart';
 
 class StarterPlaceholder extends StatelessWidget {
   const StarterPlaceholder({
     super.key,
     required this.title,
     required this.owner,
+    this.detail,
+    this.action,
   });
 
   final String title;
   final String owner;
+  final String? detail;
+  final Widget? action;
 
   @override
-  Widget build(BuildContext context) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
+  Widget build(BuildContext context) => WayhunterUnavailableView(
+    title: title,
+    message: 'Starter placeholder \u2014 $owner will implement this module.',
+    action: detail == null && action == null
+        ? null
+        : Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.construction_outlined, size: 54),
-              const SizedBox(height: 16),
-              Text(title, style: Theme.of(context).textTheme.headlineMedium,
-                  textAlign: TextAlign.center),
-              const SizedBox(height: 12),
-              Text('Starter placeholder — $owner will implement this module.',
-                  textAlign: TextAlign.center),
-              const SizedBox(height: 8),
-              const Text('No real authentication, maps, approvals or Coins are active.',
-                  textAlign: TextAlign.center),
+              if (detail case final message?)
+                Text(message, textAlign: TextAlign.center),
+              ?action,
             ],
           ),
-        ),
-      );
+  );
 }

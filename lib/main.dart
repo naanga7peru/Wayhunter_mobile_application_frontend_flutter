@@ -1,7 +1,3 @@
-import 'package:flutter/material.dart';
-import 'package:wayhunter_mobile/app/wayhunter_app.dart';
+import 'package:wayhunter_mobile/app/bootstrap/bootstrap.dart';
 
-void main() {
-  WidgetsFlutterBinding.ensureInitialized();
-  runApp(const WayhunterApp());
-}
+void main() => bootstrap();

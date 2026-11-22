@@ -1,79 +1,45 @@
 import 'package:flutter/material.dart';
+import 'package:wayhunter_mobile/app/navigation/wayhunter_shell.dart';
+import 'package:wayhunter_mobile/app/router/app_router.dart';
 import 'package:wayhunter_mobile/app/wayhunter_module.dart';
 import 'package:wayhunter_mobile/core/theme/wayhunter_theme.dart';
-import 'package:wayhunter_mobile/features/home/presentation/views/home_screen.dart';
-import 'package:wayhunter_mobile/shared/widgets/starter_placeholder.dart';
 
-class WayhunterApp extends StatelessWidget {
-  const WayhunterApp({super.key});
+class WayhunterApp extends StatefulWidget {
+  const WayhunterApp({super.key, this.environmentLabel = 'development'});
+
+  final String environmentLabel;
+
+  @override
+  State<WayhunterApp> createState() => _WayhunterAppState();
+}
+
+class _WayhunterAppState extends State<WayhunterApp> {
+  ModuleId? _module;
+  int _tab = 0;
+  late final AppRouter _router = AppRouter(_selectModule);
+
+  void _selectModule(ModuleId module) => setState(() {
+        _module = module;
+        _tab = 1;
+      });
+
+  void _selectTab(int tab) => setState(() {
+        _tab = tab == 1 && _module == null ? 0 : tab;
+      });
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-        title: 'Wayhunter Starter',
-        theme: WayhunterTheme.dark,
+        title: 'Wayhunter Starter (${widget.environmentLabel})',
+        theme: WayhunterTheme.light,
         debugShowCheckedModeBanner: false,
-        home: const WayhunterShell(),
-      );
-}
-
-class WayhunterShell extends StatefulWidget {
-  const WayhunterShell({super.key});
-
-  @override
-  State<WayhunterShell> createState() => _WayhunterShellState();
-}
-
-class _WayhunterShellState extends State<WayhunterShell> {
-  WayhunterModule? selectedModule;
-  int currentTab = 0;
-
-  void selectModule(WayhunterModule module) {
-    setState(() {
-      selectedModule = module;
-      currentTab = 1;
-    });
-  }
-
-  void selectTab(int tab) {
-    setState(() {
-      // Before a module is selected, tab 2 falls back to module selection.
-      currentTab = tab == 1 && selectedModule == null ? 0 : tab;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final module = selectedModule;
-    final Widget screen = switch (currentTab) {
-      0 => HomeScreen(onSelectModule: selectModule),
-      1 => StarterPlaceholder(
-          title: module?.title ?? 'Choose a module',
-          owner: module?.owner ?? 'M2 / M4 / M5',
-        ),
-      2 => StarterPlaceholder(
-          title: '${module?.title ?? 'Module'} leaderboard',
-          owner: 'M5 shared UI; ranking source depends on selected module',
-        ),
-      _ => const StarterPlaceholder(title: 'Profile & Wallet', owner: 'M1 + M6'),
-    };
-
-    return Scaffold(
-      body: screen,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: currentTab,
-        onDestinationSelected: selectTab,
-        destinations: [
-          const NavigationDestination(icon: Icon(Icons.home_outlined), label: 'Home'),
-          NavigationDestination(
-            icon: const Icon(Icons.explore_outlined),
-            label: module?.title ?? 'Modules',
+        onGenerateRoute: _router.onGenerateRoute,
+        home: Builder(
+          builder: (_) => WayhunterShell(
+            router: _router,
+            module: _module,
+            tab: _tab,
+            onSelectTab: _selectTab,
           ),
-          const NavigationDestination(icon: Icon(Icons.emoji_events_outlined),
-              label: 'Leaderboard'),
-          const NavigationDestination(icon: Icon(Icons.person_outline),
-              label: 'Profile'),
-        ],
-      ),
-    );
-  }
+        ),
+      );
 }
