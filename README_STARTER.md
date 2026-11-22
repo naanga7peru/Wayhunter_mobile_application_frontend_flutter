@@ -1,5 +1,5 @@
 # Wayhunter Flutter — runnable starter (not finished UI)
-- Flutter 3.47.x target, Dart 3.x; Android/Web platform files come from official `flutter create`.
+- Verified toolchain: Flutter 3.47.9 and Dart 3.13.7. Use this pair to reproduce the current lockfile, which requires Dart >=3.13.0 <4.0.0 and Flutter >=3.38.4. The pubspec declares a Dart language floor of 3.8; the resolved packages require the newer SDK.
 - M7 owns Home and shared navigation contracts; other screens are clearly labelled starter placeholders.
 - Bottom tabs: Home / Selected module / context leaderboard / Profile.
 - No Maps API, OTP, camera, Coins, Cloudinary or permissions have been integrated.

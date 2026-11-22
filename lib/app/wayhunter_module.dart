@@ -1,15 +1,18 @@
-enum WayhunterModule { traveler, hunter, game }
+import 'package:wayhunter_mobile/shared/domain/models/navigation_refs.dart';
 
-extension WayhunterModuleInfo on WayhunterModule {
+export 'package:wayhunter_mobile/shared/domain/models/navigation_refs.dart'
+    show ModuleId;
+
+extension WayhunterModuleInfo on ModuleId {
   String get title => switch (this) {
-        WayhunterModule.traveler => 'Traveler',
-        WayhunterModule.hunter => 'Location Hunter',
-        WayhunterModule.game => 'Game',
+        ModuleId.traveler => 'Traveler',
+        ModuleId.hunter => 'Location Hunter',
+        ModuleId.game => 'Game',
       };
 
   String get owner => switch (this) {
-        WayhunterModule.traveler => 'M2 / M3',
-        WayhunterModule.hunter => 'M4',
-        WayhunterModule.game => 'M5',
+        ModuleId.traveler => 'M2 / M3',
+        ModuleId.hunter => 'M4',
+        ModuleId.game => 'M5',
       };
 }
