@@ -10,10 +10,14 @@ import 'package:wayhunter_mobile/features/friends/data/trip_invitations_api.dart
 import 'package:wayhunter_mobile/features/friends/domain/trip_invitation.dart';
 import 'package:wayhunter_mobile/features/friends/presentation/friends_screen.dart';
 import 'package:wayhunter_mobile/features/home/presentation/views/home_screen.dart';
+import 'package:wayhunter_mobile/features/memories/data/trip_memories_api.dart';
+import 'package:wayhunter_mobile/features/memories/presentation/memories_screens.dart';
 import 'package:wayhunter_mobile/features/notifications/data/notifications_api.dart';
 import 'package:wayhunter_mobile/features/notifications/presentation/notifications_screen.dart';
 import 'package:wayhunter_mobile/features/profile/data/my_profile_api.dart';
 import 'package:wayhunter_mobile/features/profile/presentation/my_profile_screen.dart';
+import 'package:wayhunter_mobile/features/safety/data/trip_hazards_api.dart';
+import 'package:wayhunter_mobile/features/safety/presentation/safety_screens.dart';
 import 'package:wayhunter_mobile/features/settings/presentation/settings_screen.dart';
 import 'package:wayhunter_mobile/features/traveller/active_trip/data/trip_sessions_api.dart';
 import 'package:wayhunter_mobile/features/traveller/active_trip/presentation/active_trip_screen.dart';
@@ -150,6 +154,53 @@ Map<String, RouteRegistration<Object?>> person1Routes(
       ),
       validate: (trip) =>
           isTripPlanId(trip.plan.id) && isTripPlanId(trip.session.id),
+    ),
+    tripSafetyRoute: RouteRegistration<TripPlanRef>(
+      (context, plan) => _withFoundation(
+        context,
+        (services) => TripSafetyScreen(
+          plan: plan,
+          api: TripHazardsApi(services.api, services.session),
+        ),
+      ),
+      validate: (plan) => isTripPlanId(plan.id),
+    ),
+    tripHazardDetailsRoute: RouteRegistration<HazardDetailsArgs>(
+      (context, args) =>
+          _withFoundation(context, (_) => TripHazardDetailsScreen(args: args)),
+      validate: (args) =>
+          isTripPlanId(args.plan.id) && isTripPlanId(args.warning.id),
+    ),
+    tripMemoriesRoute: RouteRegistration<TripPlanRef>(
+      (context, plan) => _withFoundation(
+        context,
+        (services) => TripMemoriesScreen(
+          plan: plan,
+          api: TripMemoriesApi(services.api, services.session),
+        ),
+      ),
+      validate: (plan) => isTripPlanId(plan.id),
+    ),
+    tripMemoryCreateRoute: RouteRegistration<TripPlanRef>(
+      (context, plan) => _withFoundation(
+        context,
+        (services) => TripMemoryCreateScreen(
+          plan: plan,
+          api: TripMemoriesApi(services.api, services.session),
+        ),
+      ),
+      validate: (plan) => isTripPlanId(plan.id),
+    ),
+    tripMemoryDetailsRoute: RouteRegistration<TripMemoryDetailsArgs>(
+      (context, args) => _withFoundation(
+        context,
+        (services) => TripMemoryDetailsScreen(
+          args: args,
+          api: TripMemoriesApi(services.api, services.session),
+        ),
+      ),
+      validate: (args) =>
+          isTripPlanId(args.plan.id) && isTripPlanId(args.memoryId),
     ),
   };
 }

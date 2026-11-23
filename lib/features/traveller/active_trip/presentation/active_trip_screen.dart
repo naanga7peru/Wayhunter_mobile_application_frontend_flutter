@@ -8,6 +8,8 @@ import 'package:wayhunter_mobile/features/traveller/active_trip/data/trip_sessio
 import 'package:wayhunter_mobile/features/traveller/active_trip/domain/trip_session.dart';
 import 'package:wayhunter_mobile/features/traveller/planning/data/trip_plans_api.dart';
 import 'package:wayhunter_mobile/features/traveller/planning/presentation/trip_plan_widgets.dart';
+import 'package:wayhunter_mobile/features/safety/presentation/safety_screens.dart';
+import 'package:wayhunter_mobile/features/memories/presentation/memories_screens.dart';
 
 String tripSessionError(ApiException error) => switch (error.kind) {
   ApiError.unauthorized =>
@@ -181,6 +183,20 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
             onPressed: () => Navigator.of(context).pop(),
           )
         else ...[
+          WayhunterButton.secondary(
+            label: 'Trip safety',
+            onPressed: () => Navigator.of(context).pushNamed<void>(
+              tripSafetyRoute,
+              arguments: widget.reference.plan,
+            ),
+          ),
+          WayhunterButton.secondary(
+            label: 'Trip memories',
+            onPressed: () => Navigator.of(context).pushNamed<void>(
+              tripMemoriesRoute,
+              arguments: widget.reference.plan,
+            ),
+          ),
           for (final action in TripSessionAction.values)
             if (action.allows(session.status))
               WayhunterButton.primary(
