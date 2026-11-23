@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:wayhunter_mobile/app/bootstrap/foundation_services.dart';
 import 'package:wayhunter_mobile/app/router/app_router.dart';
 import 'package:wayhunter_mobile/app/router/app_routes.dart';
@@ -10,6 +11,8 @@ import 'package:wayhunter_mobile/core/auth/session_controller.dart';
 import 'package:wayhunter_mobile/core/network/api_client.dart';
 import 'package:wayhunter_mobile/core/storage/credential_store.dart';
 import 'package:wayhunter_mobile/features/wallet/domain/repositories/wallet_reader.dart';
+import 'package:wayhunter_mobile/features/wallet/domain/repositories/voucher_redemption_repository.dart';
+import 'package:wayhunter_mobile/features/wallet/domain/voucher_redemption.dart';
 import 'package:wayhunter_mobile/features/wallet/domain/wallet_preview.dart';
 import 'package:wayhunter_mobile/features/wallet/presentation/wallet_screens.dart';
 import 'package:wayhunter_mobile/shared/domain/models/navigation_refs.dart';
@@ -55,6 +58,89 @@ class _Reader implements WalletReader {
 }
 
 void main() {
+  testWidgets('voucher lookup reveals QR only after issued status', (
+    tester,
+  ) async {
+    final repository = _RedemptionRepository()..approved = true;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: WalletHomeScreen(reader: _Reader(), redemption: repository),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tapLabel(tester, 'Find voucher request');
+    await tester.enterText(find.byType(TextFormField), 'test-request');
+    await tapLabel(tester, 'Find request');
+    expect(find.text('Approved'), findsOneWidget);
+    expect(find.byType(QrImageView), findsNothing);
+    await tapLabel(tester, 'Check voucher issuance');
+    expect(find.text('Awaiting issuance'), findsOneWidget);
+    expect(find.byType(QrImageView), findsNothing);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    repository.issued = true;
+    await tapLabel(tester, 'Check voucher issuance');
+    expect(find.text('Voucher issued'), findsOneWidget);
+    expect(find.text('Voucher code: TEST-ONLY'), findsOneWidget);
+    expect(find.byType(QrImageView), findsOneWidget);
+  });
+  testWidgets(
+    'live redemption checks balance and reconciles an uncertain create',
+    (tester) async {
+      var spendable = 10099;
+      final reader = _Reader();
+      reader.balance = () async => (
+        posted: spendable,
+        reserved: 0,
+        spendable: spendable,
+        lifetimeEarned: spendable,
+      );
+      reader.offers = () async => [
+        (
+          id: 'test-offer',
+          code: 'TEST-OFFER',
+          cost: 10000,
+          referenceValueLkr: 100,
+          validUntil: DateTime.now().add(const Duration(days: 1)),
+          availableStock: 1,
+          isEligible: true,
+        ),
+      ];
+      final repository = _RedemptionRepository();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: WalletHomeScreen(reader: reader, redemption: repository),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tapLabel(tester, 'Voucher Offers');
+      await tapLabel(tester, 'TEST-OFFER');
+      await tapLabel(tester, 'Review redemption');
+      expect(
+        find.text('At least 10,100 spendable Coins are required.'),
+        findsOneWidget,
+      );
+      expect(repository.creates, 0);
+
+      spendable = 10100;
+      await tapLabel(tester, 'Review redemption');
+      await tapLabel(tester, 'Request voucher');
+      expect(repository.creates, 1);
+      expect(find.text('Pending Admin review'), findsNothing);
+      await tapLabel(tester, 'Check request and retry');
+      expect(repository.creates, 1);
+      expect(find.text('Pending Admin review'), findsOneWidget);
+      expect(find.text('Check voucher issuance'), findsNothing);
+
+      await tester.ensureVisible(find.byType(TextFormField));
+      await tester.enterText(find.byType(TextFormField), 'Entered in error');
+      await tapLabel(tester, 'Review cancellation');
+      await tapLabel(tester, 'Cancel request');
+      expect(repository.cancelReason, 'Entered in error');
+      expect(find.text('Cancelled'), findsOneWidget);
+    },
+  );
   testWidgets('Wallet route uses the shared session and clears data on sign-out', (
     tester,
   ) async {
@@ -144,7 +230,8 @@ void main() {
   testWidgets('live wallet shows empty balance, history and offers', (
     tester,
   ) async {
-    final reader = _Reader()..balance = () async => null;
+    final reader = _Reader();
+    reader.balance = () async => null;
     await tester.pumpWidget(
       MaterialApp(home: WalletHomeScreen(reader: reader)),
     );
@@ -338,4 +425,89 @@ void main() {
       }
     },
   );
+}
+
+class _RedemptionRepository implements VoucherRedemptionRepository {
+  int creates = 0;
+  bool approved = false;
+  bool issued = false;
+  String? cancelReason;
+
+  @override
+  VoucherRedemptionIntent prepareCreate(String offerId) => _Intent(offerId);
+
+  @override
+  Future<VoucherRedemptionRequest> create(
+    VoucherRedemptionIntent intent,
+  ) async {
+    creates++;
+    throw const ApiException(ApiError.timeout);
+  }
+
+  @override
+  Future<VoucherRedemptionRequest> readRequest(String requestId) async => (
+    requestId: requestId,
+    offerId: 'test-offer',
+    ownerUserId: 'test-user',
+    ownerName: 'Test User',
+    costCoins: 10000,
+    status: approved
+        ? VoucherRequestStatus.approved
+        : cancelReason == null
+        ? VoucherRequestStatus.pending
+        : VoucherRequestStatus.cancelled,
+    requestedAtUtc: DateTime.utc(2026),
+    decidedAtUtc: null,
+    decisionReason: cancelReason,
+  );
+
+  @override
+  Future<VoucherRedemptionRequest> cancel(String requestId, String reason) {
+    cancelReason = reason;
+    return readRequest(requestId);
+  }
+
+  @override
+  Future<IssuedVoucher> readIssuedVoucher(String requestId) async =>
+      _TestVoucher(requestId, issued);
+}
+
+class _Intent implements VoucherRedemptionIntent {
+  const _Intent(this.offerId);
+
+  @override
+  final String offerId;
+
+  @override
+  String get requestId => 'test-request';
+}
+
+class _TestVoucher implements IssuedVoucher {
+  const _TestVoucher(this.requestId, this.issued);
+
+  @override
+  final String requestId;
+  final bool issued;
+
+  @override
+  VoucherIssuanceStatus get status =>
+      issued ? VoucherIssuanceStatus.issued : VoucherIssuanceStatus.unissued;
+
+  @override
+  num get referenceValueLkr => 100;
+
+  @override
+  DateTime? get expiresAtUtc => null;
+
+  @override
+  DateTime? get issuedAtUtc => null;
+
+  @override
+  DateTime? get usedAtUtc => null;
+
+  @override
+  String? get voucherCode => issued ? 'TEST-ONLY' : null;
+
+  @override
+  String? get qrPayload => issued ? 'synthetic-test-payload' : null;
 }

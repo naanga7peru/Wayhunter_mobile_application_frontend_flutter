@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:wayhunter_mobile/app/bootstrap/foundation_services.dart';
 import 'package:wayhunter_mobile/app/router/app_routes.dart';
+import 'package:wayhunter_mobile/core/services/device_interfaces.dart';
 import 'package:wayhunter_mobile/core/theme/wayhunter_tokens.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_controls.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_page.dart';
@@ -50,6 +52,12 @@ class HunterHomeScreen extends StatelessWidget {
               label: 'My Hunts',
               onPressed: () =>
                   const AppDestination(AppRoutes.myHunts).open(context),
+            ),
+            WayhunterButton.secondary(
+              label: 'Hunter Leaderboard',
+              onPressed: () => const AppDestination.leaderboard(
+                ModuleId.hunter,
+              ).open(context),
             ),
           ],
         ),
@@ -147,6 +155,7 @@ class _AddNewPlaceScreenState extends State<AddNewPlaceScreen> {
               (value ?? '').trim().isEmpty ? 'Enter a description.' : null,
         ),
         const _EvidenceRequirements(),
+        const _HunterDeviceChecks(),
         WayhunterButton.primary(
           label: 'Review place details',
           onPressed: _review,
@@ -342,4 +351,100 @@ class _HuntStatusIndicator extends StatelessWidget {
     };
     return WayhunterStatusIndicator(label: label, tone: tone);
   }
+}
+
+class _HunterDeviceChecks extends StatefulWidget {
+  const _HunterDeviceChecks();
+
+  @override
+  State<_HunterDeviceChecks> createState() => _HunterDeviceChecksState();
+}
+
+class _HunterDeviceChecksState extends State<_HunterDeviceChecks> {
+  bool _busy = false;
+  String? _message;
+
+  Future<void> _capture({
+    required DevicePermission permission,
+    required String label,
+    required Future<Object> Function(FoundationServices) read,
+  }) async {
+    final services = context
+        .getInheritedWidgetOfExactType<FoundationServices>();
+    if (services == null) {
+      setState(() => _message = '$label is unavailable on this device.');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    try {
+      var access = await services.permissions.check(permission);
+      if (!mounted) return;
+      if (access == DevicePermissionStatus.denied) {
+        access = await services.permissions.request(permission);
+      }
+      if (!mounted) return;
+      if (access != DevicePermissionStatus.granted) {
+        _message = switch (access) {
+          DevicePermissionStatus.denied => '$label permission denied.',
+          DevicePermissionStatus.permanentlyDenied =>
+            '$label permission blocked. Check device settings.',
+          _ => '$label is unavailable on this device.',
+        };
+        return;
+      }
+      await read(services);
+      _message = '$label captured. Verification and upload are unavailable.';
+    } catch (_) {
+      _message = 'Could not capture $label. Try again.';
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    spacing: WayhunterLayout.small,
+    children: [
+      const Text(
+        'District validation, nearby duplicate review and restricted-place checks are unavailable.',
+      ),
+      const Text(
+        'For guided 360° evidence, record one slow full turn from a safe position.',
+      ),
+      if (_message case final message?)
+        Semantics(liveRegion: true, child: Text(message)),
+      if (_busy)
+        const WayhunterLoadingView(label: 'Waiting for device')
+      else ...[
+        WayhunterButton.secondary(
+          label: 'Get current location',
+          onPressed: () => _capture(
+            permission: DevicePermission.location,
+            label: 'GPS location',
+            read: (services) => services.location.read(),
+          ),
+        ),
+        WayhunterButton.secondary(
+          label: 'Record guided 360° video',
+          onPressed: () => _capture(
+            permission: DevicePermission.camera,
+            label: 'Live video',
+            read: (services) => services.capture.recordVideo(),
+          ),
+        ),
+        WayhunterButton.secondary(
+          label: 'Take live photo',
+          onPressed: () => _capture(
+            permission: DevicePermission.camera,
+            label: 'Live photo',
+            read: (services) => services.capture.takePhoto(),
+          ),
+        ),
+      ],
+    ],
+  );
 }

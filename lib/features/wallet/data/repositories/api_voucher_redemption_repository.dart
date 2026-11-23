@@ -13,6 +13,11 @@ class ApiVoucherRedemptionRepository implements VoucherRedemptionRepository {
   ApiVoucherRedemptionRepository(ApiClient api, SessionController session)
     : this._(api, session, false);
 
+  ApiVoucherRedemptionRepository.withMutations(
+    ApiClient api,
+    SessionController session,
+  ) : this._(api, session, true);
+
   @visibleForTesting
   ApiVoucherRedemptionRepository.withMutationsForTesting(
     ApiClient api,

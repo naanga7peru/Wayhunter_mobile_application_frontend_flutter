@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:wayhunter_mobile/app/bootstrap/foundation_services.dart';
 import 'package:wayhunter_mobile/core/network/api_client.dart';
 import 'package:wayhunter_mobile/core/theme/wayhunter_tokens.dart';
@@ -11,11 +12,21 @@ import 'package:wayhunter_mobile/shared/presentation/person2_content.dart';
 
 import '../domain/repositories/wallet_reader.dart';
 import '../domain/wallet_preview.dart';
+import '../domain/voucher_redemption.dart';
+import '../domain/repositories/voucher_redemption_repository.dart';
+
+part 'wallet_redemption_screens.dart';
 
 class WalletHomeScreen extends StatelessWidget {
-  const WalletHomeScreen({super.key, this.embedded = false, this.reader});
+  const WalletHomeScreen({
+    super.key,
+    this.embedded = false,
+    this.reader,
+    this.redemption,
+  });
 
   final WalletReader? reader;
+  final VoucherRedemptionRepository? redemption;
 
   final bool embedded;
 
@@ -23,6 +34,7 @@ class WalletHomeScreen extends StatelessWidget {
   Widget build(BuildContext context) => _WalletHome(
     demo: false,
     reader: reader,
+    redemption: redemption,
     embedded: embedded,
     readBalance: () async => null,
   );
@@ -40,12 +52,14 @@ class _WalletHome extends StatefulWidget {
     required this.demo,
     required this.readBalance,
     this.reader,
+    this.redemption,
     this.embedded = false,
   });
 
   final bool demo;
   final Future<WalletBalance?> Function() readBalance;
   final WalletReader? reader;
+  final VoucherRedemptionRepository? redemption;
   final bool embedded;
 
   @override
@@ -70,7 +84,7 @@ class _WalletHomeState extends State<_WalletHome> {
     children: [
       if (widget.reader case final reader?)
         _WalletRead<LiveWalletBalance?>(
-          key: ObjectKey(reader),
+          key: ValueKey((reader, _balance)),
           label: 'Coins balance',
           read: reader.readBalance,
           content: (balance) => balance == null
@@ -123,18 +137,33 @@ class _WalletHomeState extends State<_WalletHome> {
       _WalletLink(
         title: 'Voucher Offers',
         icon: Icons.local_offer_outlined,
-        onTap: () => _open(
-          context,
-          widget.reader != null
-              ? _LiveOffers(reader: widget.reader!)
-              : _Offers(demo: widget.demo, balance: _balance),
-        ),
+        onTap: () async {
+          await _open(
+            context,
+            widget.reader != null
+                ? _LiveOffers(
+                    reader: widget.reader!,
+                    redemption: widget.redemption,
+                  )
+                : _Offers(demo: widget.demo, balance: _balance),
+          );
+          if (mounted) _retry();
+        },
       ),
       _WalletLink(
         title: 'My Vouchers',
         icon: Icons.card_giftcard_outlined,
         onTap: () => _open(context, _MyVouchers(demo: widget.demo)),
       ),
+      if (widget.redemption case final redemption?)
+        _WalletLink(
+          title: 'Find voucher request',
+          icon: Icons.search,
+          onTap: () async {
+            await _open(context, _VoucherLookup(repository: redemption));
+            if (mounted) _retry();
+          },
+        ),
       if (!widget.demo && kDebugMode)
         WayhunterButton.secondary(
           label: 'Open Wallet DEMO',
@@ -421,9 +450,10 @@ class _Offers extends StatelessWidget {
 }
 
 class _LiveOffers extends StatelessWidget {
-  const _LiveOffers({required this.reader});
+  const _LiveOffers({required this.reader, this.redemption});
 
   final WalletReader reader;
+  final VoucherRedemptionRepository? redemption;
 
   @override
   Widget build(BuildContext context) => _WalletPage(
@@ -472,7 +502,14 @@ class _LiveOffers extends StatelessWidget {
                             ),
                             Text(_offerStock(offer)),
                             Text(_offerEligibility(offer)),
-                            const Text('Voucher redemption unavailable'),
+                            if (redemption case final repository?)
+                              _LiveRedemptionForm(
+                                offer: offer,
+                                reader: reader,
+                                repository: repository,
+                              )
+                            else
+                              const Text('Voucher redemption unavailable'),
                           ],
                         ),
                       ),
@@ -637,12 +674,12 @@ class _RedemptionDetailsState extends State<_RedemptionDetails> {
   );
 }
 
-void _open(BuildContext context, Widget page) {
+Future<void> _open(BuildContext context, Widget page) {
   final session = context
       .getInheritedWidgetOfExactType<FoundationServices>()
       ?.session;
   final openingState = session?.state;
-  Navigator.of(context).push<void>(
+  return Navigator.of(context).push<void>(
     MaterialPageRoute(
       builder: (_) => session == null
           ? page
