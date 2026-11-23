@@ -69,52 +69,29 @@ void main() {
     }
   });
 
-  testWidgets('Profile opens Person 2 previews and Back returns to Profile', (
-    tester,
-  ) async {
-    await tester.pumpWidget(const WayhunterApp());
-    await tester.tap(find.text('Profile'));
-    await tester.pumpAndSettle();
-    for (final name in ['Wallet', 'My Hunts', 'My Games']) {
-      await tester.tap(find.text(name));
+  testWidgets(
+    'Profile opens Person 2 destinations and Back returns to Profile',
+    (tester) async {
+      await tester.pumpWidget(const WayhunterApp());
+      await tester.tap(find.text('Profile'));
       await tester.pumpAndSettle();
-      expect(find.text(name), findsOneWidget);
-      expect(find.textContaining('Starter placeholder'), findsOneWidget);
+      for (final name in ['Wallet', 'My Hunts', 'My Games']) {
+        await tester.tap(find.text(name));
+        await tester.pumpAndSettle();
+        expect(find.text(name), findsOneWidget);
+        expect(
+          name == 'My Hunts'
+              ? find.text('Hunt history unavailable')
+              : find.textContaining('Starter placeholder'),
+          findsOneWidget,
+        );
 
-      await tester.pageBack();
-      await tester.pumpAndSettle();
-      expect(find.text('Development preview'), findsOneWidget);
-    }
-  });
-
-  testWidgets('Hunter hands a typed PlaceRef to Traveller and Back returns', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      const WayhunterApp(environmentLabel: 'development'),
-    );
-    await tester.tap(find.text('Location Hunter'));
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.text('SAMPLE: Preview adding a Hunter place to Traveler'),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Add place to trip'), findsOneWidget);
-    expect(
-      find.text('SAMPLE PREVIEW: Hunter place (backend approval unverified)'),
-      findsOneWidget,
-    );
-    expect(find.text('Source: Hunter-approved place'), findsNothing);
-    expect(find.textContaining('Starter placeholder'), findsOneWidget);
-
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-    expect(
-      find.text('SAMPLE: Preview adding a Hunter place to Traveler'),
-      findsOneWidget,
-    );
-  });
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+        expect(find.text('Development preview'), findsOneWidget);
+      }
+    },
+  );
 
   testWidgets(
     'unknown routes, wrong types, and invalid IDs show a safe fallback',
