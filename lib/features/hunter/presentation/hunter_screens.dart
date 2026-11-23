@@ -7,6 +7,7 @@ import 'package:wayhunter_mobile/core/widgets/wayhunter_states.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_surface.dart';
 import 'package:wayhunter_mobile/features/hunter/domain/hunter_history.dart';
 import 'package:wayhunter_mobile/shared/domain/models/navigation_refs.dart';
+import 'package:wayhunter_mobile/shared/presentation/person2_content.dart';
 
 const hunterAddNewPlaceRoute = 'hunter.addNewPlace';
 
@@ -14,28 +15,32 @@ class HunterHomeScreen extends StatelessWidget {
   const HunterHomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => _HunterContent(
+  Widget build(BuildContext context) => Person2Content(
     children: [
       WayhunterSurfaceCard(
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: WayhunterLayout.medium,
           children: [
-            Icon(
-              Icons.explore_outlined,
-              color: WayhunterColors.moduleInk(ModuleId.hunter),
-              size: 36,
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: Icon(
+                Icons.explore_outlined,
+                color: WayhunterColors.moduleInk(ModuleId.hunter),
+                size: 36,
+              ),
             ),
-            const SizedBox(height: WayhunterLayout.medium),
             const WayhunterHeader(
               title: 'Location Hunter',
               subtitle:
                   'Suggest a place and follow its verification in My Hunts.',
             ),
-            const SizedBox(height: WayhunterLayout.large),
-            const WayhunterStatusIndicator(
-              label: 'Current district unavailable',
+            const Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: WayhunterStatusIndicator(
+                label: 'Current district unavailable',
+              ),
             ),
-            const SizedBox(height: WayhunterLayout.medium),
             WayhunterButton.primary(
               label: 'Add New Place',
               onPressed: () =>
@@ -78,13 +83,13 @@ class _AddNewPlaceScreenState extends State<AddNewPlaceScreen> {
   }
 
   void _review() {
-    if (!_form.currentState!.validate()) return;
+    if (!validatePerson2Draft(_form.currentState!)) return;
     FocusScope.of(context).unfocus();
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => WayhunterPageScaffold(
           appBar: AppBar(),
-          body: _HunterContent(
+          body: Person2Content(
             children: [
               const WayhunterHeader(
                 title: 'Review place details',
@@ -118,20 +123,24 @@ class _AddNewPlaceScreenState extends State<AddNewPlaceScreen> {
   @override
   Widget build(BuildContext context) => Form(
     key: _form,
-    child: _HunterContent(
+    child: Person2Content(
       children: [
         const WayhunterHeader(
           title: 'Add New Place',
           subtitle: 'Enter the place details before adding live evidence.',
         ),
-        WayhunterTextField(
+        Person2DraftField(
           label: 'Place name',
+          hint: 'Enter the name visitors would look for',
           controller: _name,
           validator: (value) =>
               (value ?? '').trim().isEmpty ? 'Enter a place name.' : null,
         ),
-        WayhunterTextField(
+        Person2DraftField(
           label: 'Description',
+          hint: 'Describe what visitors will find there',
+          maxLines: 5,
+          textInputAction: TextInputAction.newline,
           controller: _description,
           keyboardType: TextInputType.multiline,
           validator: (value) =>
@@ -186,7 +195,12 @@ class _MyHuntsScreenState extends State<MyHuntsScreen> {
   @override
   void didUpdateWidget(MyHuntsScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!_demo && oldWidget.history != widget.history) {
+    if (_demo && widget.demoHistory == null) {
+      _demo = false;
+      _hunts = null;
+    } else if (_demo
+        ? oldWidget.demoHistory != widget.demoHistory
+        : oldWidget.history != widget.history) {
       _hunts = null;
     }
   }
@@ -197,7 +211,7 @@ class _MyHuntsScreenState extends State<MyHuntsScreen> {
   });
 
   @override
-  Widget build(BuildContext context) => _HunterContent(
+  Widget build(BuildContext context) => Person2Content(
     children: [
       const WayhunterHeader(
         title: 'My Hunts',
@@ -218,7 +232,9 @@ class _MyHuntsScreenState extends State<MyHuntsScreen> {
             .load(),
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
-            return const WayhunterLoadingView(label: 'Loading hunts');
+            return WayhunterLoadingView(
+              label: _demo ? 'Loading DEMO hunts' : 'Loading hunts',
+            );
           }
           if (snapshot.error is HunterHistoryUnavailable) {
             return WayhunterUnavailableView(
@@ -276,7 +292,7 @@ class _MyHuntsScreenState extends State<MyHuntsScreen> {
       MaterialPageRoute<void>(
         builder: (_) => WayhunterPageScaffold(
           appBar: AppBar(),
-          body: _HunterContent(
+          body: Person2Content(
             children: [
               const WayhunterHeader(title: 'Hunt details'),
               if (demo)
@@ -326,29 +342,4 @@ class _HuntStatusIndicator extends StatelessWidget {
     };
     return WayhunterStatusIndicator(label: label, tone: tone);
   }
-}
-
-class _HunterContent extends StatelessWidget {
-  const _HunterContent({required this.children});
-
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) => SafeArea(
-    child: SingleChildScrollView(
-      padding: const EdgeInsets.all(WayhunterLayout.pagePadding),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(
-            maxWidth: WayhunterLayout.contentWidth,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            spacing: WayhunterLayout.large,
-            children: children,
-          ),
-        ),
-      ),
-    ),
-  );
 }

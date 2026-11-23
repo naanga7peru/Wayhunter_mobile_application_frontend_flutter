@@ -7,6 +7,7 @@ import 'package:wayhunter_mobile/core/widgets/wayhunter_controls.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_page.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_states.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_surface.dart';
+import 'package:wayhunter_mobile/shared/presentation/person2_content.dart';
 
 import '../domain/repositories/wallet_reader.dart';
 import '../domain/wallet_preview.dart';
@@ -433,7 +434,10 @@ class _LiveOffers extends StatelessWidget {
         label: 'voucher offers',
         read: reader.readOffers,
         content: (offers) => offers.isEmpty
-            ? const WayhunterEmptyView(title: 'No voucher offers')
+            ? const WayhunterEmptyView(
+                title: 'No voucher offers',
+                message: 'Available offers will appear here.',
+              )
             : Column(
                 children: [
                   for (final offer in offers)
@@ -675,23 +679,23 @@ class _WalletPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final body = ListView(
-      padding: const EdgeInsets.all(WayhunterLayout.pagePadding),
+    final body = Person2Content(
+      spacing: WayhunterLayout.medium,
       children: [
-        if (embedded) WayhunterHeader(title: title),
-        if (demo) const Text('DEMO · Sample data'),
-        for (final child in children)
-          Padding(
-            padding: const EdgeInsets.only(bottom: WayhunterLayout.medium),
-            child: child,
+        WayhunterHeader(title: title),
+        if (demo)
+          const Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: WayhunterStatusIndicator(
+              label: 'DEMO · Sample data',
+              tone: WayhunterStatusTone.warning,
+            ),
           ),
+        ...children,
       ],
     );
     if (embedded) return body;
-    return WayhunterPageScaffold(
-      appBar: AppBar(title: Text(title)),
-      body: body,
-    );
+    return WayhunterPageScaffold(appBar: AppBar(), body: body);
   }
 }
 
@@ -710,7 +714,8 @@ class _WalletLink extends StatelessWidget {
   final Widget? subtitle;
 
   @override
-  Widget build(BuildContext context) => Card(
+  Widget build(BuildContext context) => WayhunterSurfaceCard(
+    padding: EdgeInsets.zero,
     child: ListTile(
       leading: Icon(icon),
       title: Text(title),

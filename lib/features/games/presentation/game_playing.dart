@@ -18,7 +18,10 @@ class PlayGameScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => GameContent(
     children: [
-      const WayhunterHeader(title: 'Play Game'),
+      const WayhunterHeader(
+        title: 'Play Game',
+        subtitle: 'Browse published games and check their details.',
+      ),
       if (reader case final source?)
         GameDiscovery(reader: source)
       else
@@ -68,6 +71,7 @@ class _DemoGamesScreen extends StatelessWidget {
     children: [
       for (final game in _demoGames)
         WayhunterSurfaceCard(
+          padding: EdgeInsets.zero,
           child: ListTile(
             title: Text(game.title),
             subtitle: Text('DEMO · ${game.district}'),
@@ -227,7 +231,7 @@ class _DemoResultsScreen extends StatelessWidget {
             context,
             _DemoPage(
               title: result.title,
-              children: [Text(result.description)],
+              children: [WayhunterSurfaceCard(child: Text(result.description))],
             ),
           ),
         ),
@@ -242,15 +246,27 @@ class _DemoPage extends StatelessWidget {
   final List<Widget> children;
 
   @override
-  Widget build(BuildContext context) => WayhunterPageScaffold(
-    appBar: AppBar(title: Text(title)),
-    body: GameContent(
-      children: [
-        const WayhunterSurfaceCard(child: Text('DEMO · Preview only')),
-        ...children,
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final titleInBody =
+        MediaQuery.sizeOf(context).width <
+        MediaQuery.textScalerOf(context).scale(360);
+    return WayhunterPageScaffold(
+      appBar: AppBar(title: titleInBody ? null : Text(title)),
+      body: GameContent(
+        children: [
+          if (titleInBody) WayhunterHeader(title: title),
+          const Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: WayhunterStatusIndicator(
+              label: 'DEMO · Preview only',
+              tone: WayhunterStatusTone.warning,
+            ),
+          ),
+          ...children,
+        ],
+      ),
+    );
+  }
 }
 
 void _openPage(BuildContext context, Widget page) {

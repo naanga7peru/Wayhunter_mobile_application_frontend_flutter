@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:wayhunter_mobile/core/network/api_client.dart';
+import 'package:wayhunter_mobile/core/theme/wayhunter_tokens.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_controls.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_page.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_states.dart';
@@ -17,11 +18,17 @@ class GameDiscovery extends StatelessWidget {
   Widget build(BuildContext context) => _GameRead(
     read: reader.readGames,
     builder: (context, games) => games.isEmpty
-        ? const WayhunterEmptyView(title: 'No available games')
+        ? const WayhunterEmptyView(
+            title: 'No available games',
+            message: 'Check back for newly published games.',
+          )
         : Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: WayhunterLayout.medium,
             children: [
               for (final game in games)
                 WayhunterSurfaceCard(
+                  padding: EdgeInsets.zero,
                   child: ListTile(
                     title: Text(game.title),
                     subtitle: Text('${game.durationMinutes} minutes'),
@@ -57,7 +64,7 @@ class GameDetailsScreen extends StatelessWidget {
             return WayhunterSurfaceCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                spacing: 8,
+                spacing: WayhunterLayout.small,
                 children: [
                   WayhunterHeader(title: game.title),
                   if (game.description case final description?)
@@ -107,6 +114,8 @@ class MyGameAttemptsScreen extends StatelessWidget {
           builder: (context, attempts) => attempts.isEmpty
               ? const WayhunterEmptyView(title: 'No game attempts yet')
               : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  spacing: WayhunterLayout.medium,
                   children: [
                     for (final attempt in attempts)
                       WayhunterSurfaceCard(
@@ -182,7 +191,7 @@ class _GameReadState<T> extends State<_GameRead<T>> {
     builder: (context, response) {
       final snapshot = response.data;
       if (snapshot == null) {
-        return const WayhunterLoadingView();
+        return const WayhunterLoadingView(label: 'Loading Games data');
       }
       if (snapshot.hasError) {
         final error = snapshot.error;
