@@ -52,7 +52,11 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(const WayhunterApp());
-    for (final name in ['Traveler', 'Location Hunter', 'Game']) {
+    for (final (name, category) in [
+      ('Traveler', 'Traveller'),
+      ('Location Hunter', 'Hunter'),
+      ('Game', 'Game'),
+    ]) {
       await tester.tap(find.text(name).first);
       await tester.pumpAndSettle();
       expect(
@@ -62,7 +66,9 @@ void main() {
 
       await tester.tap(find.text('Leaderboard'));
       await tester.pumpAndSettle();
-      expect(find.text('$name leaderboard'), findsOneWidget);
+      expect(find.text('$category rankings'), findsOneWidget);
+      expect(find.text('Rankings unavailable'), findsOneWidget);
+      expect(find.byType(NavigationBar), findsOneWidget);
 
       await tester.tap(find.text('Home'));
       await tester.pumpAndSettle();
