@@ -177,6 +177,15 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
         if (_notice case final message?)
           Semantics(liveRegion: true, child: Text(message)),
         if (_busy) const WayhunterLoadingView(label: 'Checking trip session'),
+        WayhunterButton.secondary(
+          label: 'Trip memories',
+          onPressed: _busy
+              ? null
+              : () => Navigator.of(context).pushNamed<void>(
+                  tripMemoriesRoute,
+                  arguments: session.reference.plan,
+                ),
+        ),
         if (completed)
           WayhunterButton.primary(
             label: 'Back to saved trip',
@@ -187,13 +196,6 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
             label: 'Trip safety',
             onPressed: () => Navigator.of(context).pushNamed<void>(
               tripSafetyRoute,
-              arguments: widget.reference.plan,
-            ),
-          ),
-          WayhunterButton.secondary(
-            label: 'Trip memories',
-            onPressed: () => Navigator.of(context).pushNamed<void>(
-              tripMemoriesRoute,
               arguments: widget.reference.plan,
             ),
           ),

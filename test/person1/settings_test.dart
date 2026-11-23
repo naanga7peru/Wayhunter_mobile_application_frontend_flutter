@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wayhunter_mobile/app/bootstrap/foundation_services.dart';
 import 'package:wayhunter_mobile/app/wayhunter_app.dart';
 import 'package:wayhunter_mobile/core/auth/session_controller.dart';
-import 'package:wayhunter_mobile/core/l10n/wayhunter_strings.dart';
 import 'package:wayhunter_mobile/core/network/api_client.dart';
 import 'package:wayhunter_mobile/core/services/device_interfaces.dart';
 import 'package:wayhunter_mobile/core/storage/credential_store.dart';
@@ -184,34 +183,20 @@ void main() {
   );
 
   testWidgets(
-    'Tamil and Sinhala preview existing strings without changing app locale',
+    'Language settings show English and offer no unsupported language selection',
     (tester) async {
       final h = _Harness();
       await h.open(tester);
       await _settings(tester);
       await _tap(tester, 'Language');
-      expect(find.text('App interface: English'), findsOneWidget);
-      final dropdown = find.byType(DropdownButton<Locale>);
-      for (final (label, code) in [('Tamil', 'ta'), ('Sinhala', 'si')]) {
-        await tester.tap(dropdown);
-        await tester.pumpAndSettle();
-        await _tap(tester, label);
-        expect(
-          find.text(WayhunterStrings.forLocale(Locale(code)).loading),
-          findsOneWidget,
-        );
-        expect(
-          Localizations.localeOf(tester.element(dropdown)).languageCode,
-          'en',
-        );
-        expect(find.text('App interface: English'), findsOneWidget);
-      }
-      await tester.pageBack();
-      await tester.pumpAndSettle();
-      await _tap(tester, 'Language');
+
+      final english = find.text('App interface: English');
+      expect(english, findsOneWidget);
+      expect(find.text('Tamil and Sinhala unavailable'), findsOneWidget);
+      expect(find.byType(DropdownButton<Locale>), findsNothing);
       expect(
-        tester.widget<DropdownButton<Locale>>(dropdown).value,
-        const Locale('en'),
+        Localizations.localeOf(tester.element(english)).languageCode,
+        'en',
       );
     },
   );

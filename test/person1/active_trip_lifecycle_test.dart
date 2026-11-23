@@ -219,6 +219,43 @@ void main() {
   );
 
   testWidgets(
+    'confirmed completion opens authenticated memories for its trip',
+    (tester) async {
+      final h = _Harness();
+      const memoriesPath = '/api/mobile/trips/$_planId/memories';
+      h.mock((request) {
+        if (request.uri.path == memoriesPath) {
+          expect(request.method, ApiMethod.get);
+          expect(
+            request.headers['Authorization'],
+            'Bearer synthetic-session-owner',
+          );
+          return _json([]);
+        }
+        return switch (request.uri.path) {
+          '$_sessionPath/recover' => _json(_session(1)),
+          '$_sessionPath/finish' => _json(_session(3)),
+          _ => fail('Unexpected path: ${request.uri.path}'),
+        };
+      });
+      await h.open(tester);
+      await _openActive(tester);
+      await _tap(tester, 'Finish trip');
+      expect(find.text('Completed trip'), findsOneWidget);
+
+      await _tap(tester, 'Trip memories');
+      expect(find.text('No saved memories'), findsOneWidget);
+      expect(
+        h.transport.requests.where((r) => r.uri.path == memoriesPath),
+        hasLength(1),
+      );
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.text('Completed trip'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
     'action conflict recovers current status and duplicate taps send one mutation',
     (tester) async {
       final h = _Harness();
@@ -278,6 +315,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Trip session unavailable'), findsOneWidget);
       expect(find.text('Completed trip'), findsNothing);
+      expect(find.text('Trip memories'), findsNothing);
       expect(find.text('Finish trip'), findsNothing);
       await _tap(tester, 'Retry');
       expect(

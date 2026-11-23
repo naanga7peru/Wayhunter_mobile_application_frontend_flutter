@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:wayhunter_mobile/core/l10n/wayhunter_strings.dart';
 import 'package:wayhunter_mobile/core/services/device_interfaces.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_controls.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_page.dart';
@@ -101,58 +100,20 @@ class _AccountSecurity extends StatelessWidget {
   );
 }
 
-class _LanguageSettings extends StatefulWidget {
+class _LanguageSettings extends StatelessWidget {
   const _LanguageSettings();
 
   @override
-  State<_LanguageSettings> createState() => _LanguageSettingsState();
-}
-
-class _LanguageSettingsState extends State<_LanguageSettings> {
-  Locale _preview = const Locale('en');
-
-  static const _names = {'en': 'English', 'ta': 'Tamil', 'si': 'Sinhala'};
-
-  @override
-  Widget build(BuildContext context) {
-    final strings = WayhunterStrings.forLocale(_preview);
-    return TripContent(
-      title: 'Language settings',
-      children: [
-        const Text('App interface: English'),
-        const Text(
-          'Preview shared labels below. This choice only applies while this screen is open.',
-        ),
-        WayhunterSurfaceCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            spacing: 12,
-            children: [
-              const Text('Preview language'),
-              DropdownButton<Locale>(
-                value: _preview,
-                isExpanded: true,
-                items: [
-                  for (final locale in WayhunterStrings.supportedLocales)
-                    DropdownMenuItem(
-                      value: locale,
-                      child: Text(_names[locale.languageCode]!),
-                    ),
-                ],
-                onChanged: (locale) {
-                  if (locale != null) setState(() => _preview = locale);
-                },
-              ),
-              Text(strings.loading),
-              Text(strings.retry),
-              Text(strings.confirm),
-              Text(strings.cancel),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
+  Widget build(BuildContext context) => const TripContent(
+    title: 'Language settings',
+    children: [
+      Text('App interface: English'),
+      WayhunterUnavailableView(
+        title: 'Tamil and Sinhala unavailable',
+        message: 'The app interface is currently available in English only.',
+      ),
+    ],
+  );
 }
 
 class _PrivacySettings extends StatefulWidget {
