@@ -6,6 +6,9 @@ import 'package:wayhunter_mobile/core/widgets/wayhunter_controls.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_page.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_states.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_surface.dart';
+import 'package:wayhunter_mobile/features/traveller/active_trip/data/trip_sessions_api.dart';
+import 'package:wayhunter_mobile/features/traveller/active_trip/domain/trip_session.dart';
+import 'package:wayhunter_mobile/features/traveller/active_trip/presentation/active_trip_screen.dart';
 import 'package:wayhunter_mobile/features/traveller/planning/data/trip_plans_api.dart';
 import 'package:wayhunter_mobile/features/traveller/planning/domain/trip_plan.dart';
 import 'package:wayhunter_mobile/features/traveller/planning/presentation/trip_editor.dart';
@@ -91,10 +94,12 @@ class SavedTripDetails extends StatefulWidget {
     super.key,
     required this.api,
     required this.reference,
+    required this.sessions,
   });
 
   final TripPlansApi api;
   final TripPlanRef reference;
+  final TripSessionsApi sessions;
 
   @override
   State<SavedTripDetails> createState() => _SavedTripDetailsState();
@@ -107,6 +112,7 @@ class _SavedTripDetailsState extends State<SavedTripDetails> {
   bool _busy = false;
   bool _reloadRequired = false;
   bool _accessLost = false;
+  String? _startError;
 
   @override
   void dispose() {
@@ -203,7 +209,42 @@ class _SavedTripDetailsState extends State<SavedTripDetails> {
     }
   }
 
+  Future<void> _openSession() async {
+    if (_busy || _reloadRequired) return;
+    setState(() {
+      _busy = true;
+      _startError = null;
+    });
+    TripSession? session;
+    try {
+      session =
+          widget.sessions.known(widget.reference) ??
+          await widget.sessions.start(widget.reference);
+    } on ApiException catch (error) {
+      if (mounted) {
+        setState(() {
+          _startError = widget.sessions.startNeedsVerification(widget.reference)
+              ? 'Start could not be confirmed. Recovery requires a session ID. Starting again is blocked.'
+              : tripSessionError(error);
+          _accessLost =
+              error.kind == ApiError.unauthorized ||
+              error.kind == ApiError.forbidden;
+          if (_accessLost) _error = _startError;
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+    if (session == null || !mounted) return;
+    await AppDestination.activeTrip(session.reference).open(context);
+    if (mounted) setState(() {});
+  }
+
   Widget _trip(TripPlan plan) {
+    final knownSession = widget.sessions.known(widget.reference);
+    final startBlocked = widget.sessions.startNeedsVerification(
+      widget.reference,
+    );
     final editable = !_busy && !_reloadRequired;
     return PopScope(
       canPop: !_busy,
@@ -211,6 +252,20 @@ class _SavedTripDetailsState extends State<SavedTripDetails> {
         title: 'Saved trip',
         children: [
           WayhunterSurfaceCard(child: TripSummary(info: plan.information)),
+          WayhunterButton.primary(
+            label: switch (knownSession?.status) {
+              null => 'Start trip',
+              TripSessionStatus.finished => 'View completed trip',
+              _ => 'Open trip session',
+            },
+            onPressed: editable && !startBlocked ? _openSession : null,
+          ),
+          if (_startError case final message?)
+            Semantics(liveRegion: true, child: Text(message))
+          else if (startBlocked)
+            const Text(
+              'Start could not be confirmed. Recovery requires a session ID.',
+            ),
           WayhunterButton.secondary(
             label: 'Edit trip information',
             onPressed: editable && plan.hasRowVersion

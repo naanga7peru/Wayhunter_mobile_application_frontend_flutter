@@ -7,6 +7,8 @@ import 'package:wayhunter_mobile/features/auth/data/identity_api.dart';
 import 'package:wayhunter_mobile/features/auth/presentation/auth_flow.dart';
 import 'package:wayhunter_mobile/features/auth/presentation/auth_gate.dart';
 import 'package:wayhunter_mobile/features/home/presentation/views/home_screen.dart';
+import 'package:wayhunter_mobile/features/traveller/active_trip/data/trip_sessions_api.dart';
+import 'package:wayhunter_mobile/features/traveller/active_trip/presentation/active_trip_screen.dart';
 import 'package:wayhunter_mobile/features/traveller/planning/data/trip_plans_api.dart';
 import 'package:wayhunter_mobile/features/traveller/planning/domain/trip_plan.dart';
 import 'package:wayhunter_mobile/features/traveller/planning/presentation/traveller_screens.dart';
@@ -18,59 +20,92 @@ const person1AuthRoute = 'auth.signIn';
 
 Map<String, RouteRegistration<Object?>> person1Routes(
   ValueChanged<ModuleId> selectModule,
-) => {
-  person1AuthRoute: RouteRegistration<Null>((context, _) {
-    final services = FoundationServices.of(context);
-    return AuthFlow(api: IdentityApi(services.api), session: services.session);
-  }),
-  AppRoutes.home: RouteRegistration<Null>(
-    (_, arguments) => HomeScreen(onSelectModule: selectModule),
-  ),
-  AppRoutes.traveller: RouteRegistration<Null>((_, _) => const TravellerHome()),
-  createTripRoute: RouteRegistration<Null>(
-    (context, _) => _planning(context, (api) => TripEditor(api: api)),
-  ),
-  myTripPlansRoute: RouteRegistration<Null>(
-    (context, _) => _planning(context, (api) => MyTripPlans(api: api)),
-  ),
-  AppRoutes.profile: const RouteRegistration<Null>(_profile),
-  AppRoutes.userProfile: RouteRegistration<UserRef>(
-    (_, arguments) =>
-        const StarterPlaceholder(title: 'User profile', owner: 'M1'),
-    validate: (user) => isNavigationId(user.id),
-  ),
-  AppRoutes.addPlace: RouteRegistration<PlaceRef>(
-    (_, place) => StarterPlaceholder(
-      title: 'Add place to trip',
-      owner: 'M2',
-      detail: switch (place.source) {
-        PlaceSource.hunterApproved =>
-          'SAMPLE PREVIEW: Hunter place (backend approval unverified)',
-        PlaceSource.externalProvider => 'Source: External provider',
-      },
-    ),
-    validate: (place) => isNavigationId(place.id),
-  ),
-  AppRoutes.tripPlan: RouteRegistration<TripPlanRef>(
-    (context, plan) => _planning(
-      context,
-      (api) => SavedTripDetails(api: api, reference: plan),
-    ),
-    validate: (plan) => isTripPlanId(plan.id),
-  ),
-  AppRoutes.activeTrip: RouteRegistration<ActiveTripArgs>(
-    (_, arguments) =>
-        const StarterPlaceholder(title: 'Active trip', owner: 'M3'),
-    validate: (trip) =>
-        isNavigationId(trip.plan.id) && isNavigationId(trip.session.id),
-  ),
-};
+) {
+  TripSessionsApi? sessions;
+  TripSessionsApi lifecycle(FoundationServices services) {
+    final current = sessions;
+    if (current != null && current.belongsTo(services.session)) return current;
+    return sessions = TripSessionsApi(services.api, services.session);
+  }
 
-Widget _planning(BuildContext context, Widget Function(TripPlansApi) builder) {
+  return {
+    person1AuthRoute: RouteRegistration<Null>((context, _) {
+      final services = FoundationServices.of(context);
+      return AuthFlow(
+        api: IdentityApi(services.api),
+        session: services.session,
+      );
+    }),
+    AppRoutes.home: RouteRegistration<Null>(
+      (_, arguments) => HomeScreen(onSelectModule: selectModule),
+    ),
+    AppRoutes.traveller: RouteRegistration<Null>(
+      (_, _) => const TravellerHome(),
+    ),
+    createTripRoute: RouteRegistration<Null>(
+      (context, _) => _planning(context, (api) => TripEditor(api: api)),
+    ),
+    myTripPlansRoute: RouteRegistration<Null>(
+      (context, _) => _planning(context, (api) => MyTripPlans(api: api)),
+    ),
+    AppRoutes.profile: const RouteRegistration<Null>(_profile),
+    AppRoutes.userProfile: RouteRegistration<UserRef>(
+      (_, arguments) =>
+          const StarterPlaceholder(title: 'User profile', owner: 'M1'),
+      validate: (user) => isNavigationId(user.id),
+    ),
+    AppRoutes.addPlace: RouteRegistration<PlaceRef>(
+      (_, place) => StarterPlaceholder(
+        title: 'Add place to trip',
+        owner: 'M2',
+        detail: switch (place.source) {
+          PlaceSource.hunterApproved =>
+            'SAMPLE PREVIEW: Hunter place (backend approval unverified)',
+          PlaceSource.externalProvider => 'Source: External provider',
+        },
+      ),
+      validate: (place) => isNavigationId(place.id),
+    ),
+    AppRoutes.tripPlan: RouteRegistration<TripPlanRef>(
+      (context, plan) => _withFoundation(
+        context,
+        (services) => SavedTripDetails(
+          api: TripPlansApi(services.api, services.session),
+          reference: plan,
+          sessions: lifecycle(services),
+        ),
+      ),
+      validate: (plan) => isTripPlanId(plan.id),
+    ),
+    AppRoutes.activeTrip: RouteRegistration<ActiveTripArgs>(
+      (context, args) => _withFoundation(
+        context,
+        (services) => ActiveTripScreen(
+          reference: args,
+          plans: TripPlansApi(services.api, services.session),
+          sessions: lifecycle(services),
+        ),
+      ),
+      validate: (trip) =>
+          isTripPlanId(trip.plan.id) && isTripPlanId(trip.session.id),
+    ),
+  };
+}
+
+Widget _planning(BuildContext context, Widget Function(TripPlansApi) builder) =>
+    _withFoundation(
+      context,
+      (services) => builder(TripPlansApi(services.api, services.session)),
+    );
+
+Widget _withFoundation(
+  BuildContext context,
+  Widget Function(FoundationServices) builder,
+) {
   final services = context
       .dependOnInheritedWidgetOfExactType<FoundationServices>();
   if (services == null) return const WayhunterUnavailableView();
-  return builder(TripPlansApi(services.api, services.session));
+  return builder(services);
 }
 
 Widget _profile(BuildContext context, Null arguments) => SafeArea(
