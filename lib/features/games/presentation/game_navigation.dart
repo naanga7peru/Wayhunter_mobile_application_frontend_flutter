@@ -8,6 +8,8 @@ import 'package:wayhunter_mobile/shared/domain/models/navigation_refs.dart';
 
 const createGameRoute = 'games.create';
 const playGameRoute = 'games.play';
+const gameDetailsRoute = 'games.details';
+const myGameAttemptsRoute = 'games.myAttempts';
 
 class GameZoneScreen extends StatelessWidget {
   const GameZoneScreen({super.key});
@@ -35,6 +37,11 @@ class GameZoneScreen extends StatelessWidget {
               label: 'Play Game',
               onPressed: () =>
                   const AppDestination(playGameRoute).open(context),
+            ),
+            WayhunterButton.secondary(
+              label: 'My Game Attempts',
+              onPressed: () =>
+                  const AppDestination(myGameAttemptsRoute).open(context),
             ),
             WayhunterButton.secondary(
               label: 'My Games',
