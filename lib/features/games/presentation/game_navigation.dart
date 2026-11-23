@@ -53,6 +53,11 @@ class GameZoneScreen extends StatelessWidget {
               onPressed: () =>
                   const AppDestination(AppRoutes.myGames).open(context),
             ),
+            WayhunterButton.secondary(
+              label: 'Game Leaderboard',
+              onPressed: () =>
+                  const AppDestination.leaderboard(ModuleId.game).open(context),
+            ),
           ],
         ),
       ),

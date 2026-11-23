@@ -16,7 +16,11 @@ class GameDiscovery extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _GameRead(
-    read: reader.readGames,
+    read: () async {
+      final games = await reader.readGames();
+      final now = DateTime.now();
+      return games.where((game) => game.expiresAt.isAfter(now)).toList();
+    },
     builder: (context, games) => games.isEmpty
         ? const WayhunterEmptyView(
             title: 'No available games',
@@ -61,6 +65,9 @@ class GameDetailsScreen extends StatelessWidget {
               return const WayhunterUnavailableView(title: 'Game not found');
             }
             final game = details.game;
+            if (!game.expiresAt.isAfter(DateTime.now())) {
+              return const WayhunterUnavailableView(title: 'Game has expired');
+            }
             return WayhunterSurfaceCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

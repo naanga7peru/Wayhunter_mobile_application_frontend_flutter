@@ -15,6 +15,7 @@ import 'package:wayhunter_mobile/features/hunter/data/hunter_history_sources.dar
 import 'package:wayhunter_mobile/features/hunter/presentation/hunter_screens.dart';
 import 'package:wayhunter_mobile/features/leaderboards/presentation/leaderboard_screens.dart';
 import 'package:wayhunter_mobile/features/wallet/data/repositories/api_wallet_reader.dart';
+import 'package:wayhunter_mobile/features/wallet/data/repositories/api_voucher_redemption_repository.dart';
 import 'package:wayhunter_mobile/features/wallet/presentation/wallet_screens.dart';
 import 'package:wayhunter_mobile/shared/domain/models/navigation_refs.dart';
 
@@ -62,6 +63,12 @@ final person2Routes = <String, RouteRegistration<Object?>>{
           key: ObjectKey(state),
           embedded: true,
           reader: state.status == SessionStatus.authenticated ? reader : null,
+          redemption: state.status == SessionStatus.authenticated
+              ? ApiVoucherRedemptionRepository.withMutations(
+                  services.api,
+                  services.session,
+                )
+              : null,
         );
       },
     );
