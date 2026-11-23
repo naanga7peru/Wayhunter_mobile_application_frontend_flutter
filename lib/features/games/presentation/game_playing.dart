@@ -6,19 +6,26 @@ import 'package:wayhunter_mobile/core/widgets/wayhunter_states.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_surface.dart';
 import 'package:wayhunter_mobile/features/games/presentation/game_navigation.dart';
 
+import '../domain/games_reader.dart';
+import 'game_read_screens.dart';
+
 class PlayGameScreen extends StatelessWidget {
-  const PlayGameScreen({super.key, this.enableDemo = false});
+  const PlayGameScreen({super.key, this.enableDemo = false, this.reader});
 
   final bool enableDemo;
+  final GamesReader? reader;
 
   @override
   Widget build(BuildContext context) => GameContent(
     children: [
       const WayhunterHeader(title: 'Play Game'),
-      const WayhunterUnavailableView(
-        title: 'Live discovery unavailable',
-        message: 'Available games require a connected game service.',
-      ),
+      if (reader case final source?)
+        GameDiscovery(reader: source)
+      else
+        const WayhunterUnavailableView(
+          title: 'Live discovery unavailable',
+          message: 'Available games require a connected game service.',
+        ),
       if (enableDemo)
         WayhunterButton.secondary(
           label: 'Browse DEMO games',
