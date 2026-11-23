@@ -5,6 +5,7 @@ import 'package:wayhunter_mobile/core/widgets/wayhunter_page.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_states.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_surface.dart';
 import 'package:wayhunter_mobile/features/auth/presentation/auth_gate.dart';
+import 'package:wayhunter_mobile/features/friends/presentation/friends_screen.dart';
 import 'package:wayhunter_mobile/features/notifications/presentation/notifications_screen.dart';
 import 'package:wayhunter_mobile/features/profile/data/my_profile_api.dart';
 import 'package:wayhunter_mobile/features/profile/presentation/account_read_panel.dart';
@@ -61,7 +62,11 @@ class MyProfileScreen extends StatelessWidget {
           ),
         const AuthSignOutTile(),
         if (api != null) ...[
-          for (final label in ['Edit Profile', 'Friends', 'Settings'])
+          ListTile(
+            title: const Text('Friends'),
+            onTap: () => const AppDestination(friendsRoute).open(context),
+          ),
+          for (final label in ['Edit Profile', 'Settings'])
             ListTile(
               title: Text(label),
               onTap: () => _unavailable(context, label),

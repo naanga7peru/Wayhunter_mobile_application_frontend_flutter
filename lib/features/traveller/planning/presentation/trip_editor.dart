@@ -4,6 +4,7 @@ import 'package:wayhunter_mobile/core/network/api_client.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_controls.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_states.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_surface.dart';
+import 'package:wayhunter_mobile/features/friends/presentation/friends_screen.dart';
 import 'package:wayhunter_mobile/features/traveller/planning/data/trip_plans_api.dart';
 import 'package:wayhunter_mobile/features/traveller/planning/domain/trip_plan.dart';
 import 'package:wayhunter_mobile/features/traveller/planning/presentation/trip_plan_widgets.dart';
@@ -226,6 +227,11 @@ class _TripEditorState extends State<TripEditor> {
             },
           ),
           WayhunterButton.primary(label: 'Continue', onPressed: _continue),
+          if (widget.plan == null)
+            WayhunterButton.secondary(
+              label: 'Add Friends',
+              onPressed: () => const AppDestination(friendsRoute).open(context),
+            ),
         ],
       ),
     ),

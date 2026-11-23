@@ -9,6 +9,7 @@ import 'package:wayhunter_mobile/core/widgets/wayhunter_surface.dart';
 import 'package:wayhunter_mobile/features/traveller/active_trip/data/trip_sessions_api.dart';
 import 'package:wayhunter_mobile/features/traveller/active_trip/domain/trip_session.dart';
 import 'package:wayhunter_mobile/features/traveller/active_trip/presentation/active_trip_screen.dart';
+import 'package:wayhunter_mobile/features/friends/presentation/friends_screen.dart';
 import 'package:wayhunter_mobile/features/traveller/planning/data/trip_plans_api.dart';
 import 'package:wayhunter_mobile/features/traveller/planning/domain/trip_plan.dart';
 import 'package:wayhunter_mobile/features/traveller/planning/presentation/trip_editor.dart';
@@ -266,11 +267,26 @@ class _SavedTripDetailsState extends State<SavedTripDetails> {
             const Text(
               'Start could not be confirmed. Recovery requires a session ID.',
             ),
-          WayhunterButton.secondary(
-            label: 'Edit trip information',
-            onPressed: editable && plan.hasRowVersion
-                ? () => _edit(plan)
-                : null,
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            children: [
+              WayhunterButton.secondary(
+                label: 'Edit trip information',
+                onPressed: editable && plan.hasRowVersion
+                    ? () => _edit(plan)
+                    : null,
+              ),
+              WayhunterButton.secondary(
+                label: 'Add Friends',
+                onPressed: editable
+                    ? () => Navigator.of(context).pushNamed<void>(
+                        tripFriendsRoute,
+                        arguments: TripPlanRef(plan.id),
+                      )
+                    : null,
+              ),
+            ],
           ),
           if (!plan.hasRowVersion)
             const Text('Editing trip information requires a server version.'),

@@ -6,6 +6,9 @@ import 'package:wayhunter_mobile/core/widgets/wayhunter_states.dart';
 import 'package:wayhunter_mobile/features/advertisements/data/home_advertisements_api.dart';
 import 'package:wayhunter_mobile/features/auth/data/identity_api.dart';
 import 'package:wayhunter_mobile/features/auth/presentation/auth_flow.dart';
+import 'package:wayhunter_mobile/features/friends/data/trip_invitations_api.dart';
+import 'package:wayhunter_mobile/features/friends/domain/trip_invitation.dart';
+import 'package:wayhunter_mobile/features/friends/presentation/friends_screen.dart';
 import 'package:wayhunter_mobile/features/home/presentation/views/home_screen.dart';
 import 'package:wayhunter_mobile/features/notifications/data/notifications_api.dart';
 import 'package:wayhunter_mobile/features/notifications/presentation/notifications_screen.dart';
@@ -25,6 +28,13 @@ const person1AuthRoute = 'auth.signIn';
 Map<String, RouteRegistration<Object?>> person1Routes(
   ValueChanged<ModuleId> selectModule,
 ) {
+  TripInvitationsApi? invitations;
+  TripInvitationsApi friends(FoundationServices services) {
+    final current = invitations;
+    if (current != null && current.belongsTo(services.session)) return current;
+    return invitations = TripInvitationsApi(services.api, services.session);
+  }
+
   TripSessionsApi? sessions;
   TripSessionsApi lifecycle(FoundationServices services) {
     final current = sessions;
@@ -69,6 +79,19 @@ Map<String, RouteRegistration<Object?>> person1Routes(
             : MyProfileApi(services.api, services.session),
       );
     }),
+    friendsRoute: RouteRegistration<Null>(
+      (context, _) => _withFoundation(
+        context,
+        (services) => FriendsScreen(api: friends(services)),
+      ),
+    ),
+    tripFriendsRoute: RouteRegistration<TripPlanRef>(
+      (context, trip) => _withFoundation(
+        context,
+        (services) => FriendsScreen(api: friends(services), trip: trip),
+      ),
+      validate: (trip) => isInvitationGuid(trip.id),
+    ),
     notificationsRoute: RouteRegistration<Null>(
       (context, _) => _withFoundation(
         context,
