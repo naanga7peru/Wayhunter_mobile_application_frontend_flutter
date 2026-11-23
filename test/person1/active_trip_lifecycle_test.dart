@@ -84,7 +84,15 @@ class _Harness {
 
   void mock(FutureOr<TransportResponse> Function(TransportRequest) respond) {
     transport.handle = (request) => switch (request.uri.path) {
-      '/api/mobile/identity/me' => _json({'userId': _owner}),
+      '/api/mobile/identity/me' => _json({
+        'userId':
+            request.headers['Authorization'] == 'Bearer synthetic-other-account'
+            ? _other
+            : _owner,
+        'displayName': 'Synthetic visitor',
+        'email': 'visitor@example.invalid',
+      }),
+      '/api/mobile/advertisements/active' => _json([]),
       '/api/mobile/auth/logout' => const TransportResponse(204, []),
       '/api/mobile/identity/login' => _json({
         'userId': _other,

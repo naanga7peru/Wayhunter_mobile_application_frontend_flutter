@@ -21,13 +21,35 @@ TransportResponse _json(int status, Object body) =>
 
 class _Transport implements HttpTransport {
   final requests = <TransportRequest>[];
+  String? _validatedBearer;
   FutureOr<TransportResponse> Function(TransportRequest) respond = (_) =>
       throw StateError('Unexpected network request');
 
   @override
   Future<TransportResponse> send(TransportRequest request) async {
+    final path = request.uri.path;
+    final bearer = request.headers['Authorization'];
+    if (path == '/api/mobile/advertisements/active') return _json(200, []);
+    // Dashboard reads follow startup verification and are outside the gate assertions.
+    if (path == '/api/mobile/identity/me' &&
+        bearer != null &&
+        bearer == _validatedBearer) {
+      return _json(200, {
+        'userId': bearer == 'Bearer synthetic-second' ? _second : _first,
+        'displayName': 'Synthetic visitor',
+        'email': 'visitor@example.invalid',
+      });
+    }
     requests.add(request);
-    return respond(request);
+    final response = await respond(request);
+    if (response.statusCode == 200 && path == '/api/mobile/identity/me') {
+      _validatedBearer = bearer;
+    } else if (response.statusCode == 200 &&
+        path == '/api/mobile/identity/login') {
+      final payload = jsonDecode(utf8.decode(response.bodyBytes)) as Map;
+      _validatedBearer = 'Bearer ${payload['accessToken']}';
+    }
+    return response;
   }
 }
 

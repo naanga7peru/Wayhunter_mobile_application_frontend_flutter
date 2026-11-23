@@ -3,10 +3,12 @@ import 'package:wayhunter_mobile/app/bootstrap/foundation_services.dart';
 import 'package:wayhunter_mobile/app/router/app_routes.dart';
 import 'package:wayhunter_mobile/app/router/route_registration.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_states.dart';
+import 'package:wayhunter_mobile/features/advertisements/data/home_advertisements_api.dart';
 import 'package:wayhunter_mobile/features/auth/data/identity_api.dart';
 import 'package:wayhunter_mobile/features/auth/presentation/auth_flow.dart';
-import 'package:wayhunter_mobile/features/auth/presentation/auth_gate.dart';
 import 'package:wayhunter_mobile/features/home/presentation/views/home_screen.dart';
+import 'package:wayhunter_mobile/features/profile/data/my_profile_api.dart';
+import 'package:wayhunter_mobile/features/profile/presentation/my_profile_screen.dart';
 import 'package:wayhunter_mobile/features/traveller/active_trip/data/trip_sessions_api.dart';
 import 'package:wayhunter_mobile/features/traveller/active_trip/presentation/active_trip_screen.dart';
 import 'package:wayhunter_mobile/features/traveller/planning/data/trip_plans_api.dart';
@@ -36,9 +38,18 @@ Map<String, RouteRegistration<Object?>> person1Routes(
         session: services.session,
       );
     }),
-    AppRoutes.home: RouteRegistration<Null>(
-      (_, arguments) => HomeScreen(onSelectModule: selectModule),
-    ),
+    AppRoutes.home: RouteRegistration<Null>((context, _) {
+      final services = _foundation(context);
+      return HomeScreen(
+        onSelectModule: selectModule,
+        profileApi: services == null
+            ? null
+            : MyProfileApi(services.api, services.session),
+        advertisementsApi: services == null
+            ? null
+            : HomeAdvertisementsApi(services.api, services.session),
+      );
+    }),
     AppRoutes.traveller: RouteRegistration<Null>(
       (_, _) => const TravellerHome(),
     ),
@@ -48,7 +59,18 @@ Map<String, RouteRegistration<Object?>> person1Routes(
     myTripPlansRoute: RouteRegistration<Null>(
       (context, _) => _planning(context, (api) => MyTripPlans(api: api)),
     ),
-    AppRoutes.profile: const RouteRegistration<Null>(_profile),
+    AppRoutes.profile: RouteRegistration<Null>((context, _) {
+      final services = _foundation(context);
+      return MyProfileScreen(
+        api: services == null
+            ? null
+            : MyProfileApi(services.api, services.session),
+      );
+    }),
+    notificationsPlaceholderRoute: RouteRegistration<Null>(
+      (_, _) =>
+          const WayhunterUnavailableView(title: 'Notifications unavailable'),
+    ),
     AppRoutes.userProfile: RouteRegistration<UserRef>(
       (_, arguments) =>
           const StarterPlaceholder(title: 'User profile', owner: 'M1'),
@@ -102,31 +124,10 @@ Widget _withFoundation(
   BuildContext context,
   Widget Function(FoundationServices) builder,
 ) {
-  final services = context
-      .dependOnInheritedWidgetOfExactType<FoundationServices>();
+  final services = _foundation(context);
   if (services == null) return const WayhunterUnavailableView();
   return builder(services);
 }
 
-Widget _profile(BuildContext context, Null arguments) => SafeArea(
-  child: ListView(
-    padding: const EdgeInsets.all(24),
-    children: [
-      Text('Profile', style: Theme.of(context).textTheme.headlineMedium),
-      const Text('Development preview'),
-      ListTile(
-        title: const Text('Wallet'),
-        onTap: () => const AppDestination(AppRoutes.wallet).open(context),
-      ),
-      ListTile(
-        title: const Text('My Hunts'),
-        onTap: () => const AppDestination(AppRoutes.myHunts).open(context),
-      ),
-      ListTile(
-        title: const Text('My Games'),
-        onTap: () => const AppDestination(AppRoutes.myGames).open(context),
-      ),
-      const AuthSignOutTile(),
-    ],
-  ),
-);
+FoundationServices? _foundation(BuildContext context) =>
+    context.dependOnInheritedWidgetOfExactType<FoundationServices>();

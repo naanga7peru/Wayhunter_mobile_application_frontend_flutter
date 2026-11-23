@@ -103,7 +103,14 @@ class _Harness {
   void mock(FutureOr<TransportResponse> Function(TransportRequest) respond) {
     transport.respond = (request) {
       if (request.uri.path == '/api/mobile/identity/me') {
-        return _json(200, {'userId': _owner});
+        return _json(200, {
+          'userId': _owner,
+          'displayName': 'Synthetic visitor',
+          'email': 'visitor@example.invalid',
+        });
+      }
+      if (request.uri.path == '/api/mobile/advertisements/active') {
+        return _json(200, []);
       }
       if (request.uri.path == '/api/mobile/auth/logout') {
         return const TransportResponse(204, []);
@@ -164,7 +171,7 @@ void main() {
     await tap(tester, find.text('Create new trip'));
     await tap(tester, find.text('Continue'));
     expect(find.text('Enter a valid start date.'), findsOneWidget);
-    expect(h.transport.requests, hasLength(1));
+    expect(h.transport.requests.where((r) => r.uri.path == _base), isEmpty);
     for (final (i, value) in [
       'Synthetic trip',
       '2026-11-27',
