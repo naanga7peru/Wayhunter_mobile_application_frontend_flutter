@@ -1,9 +1,22 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wayhunter_mobile/app/bootstrap/foundation_services.dart';
+import 'package:wayhunter_mobile/app/router/app_router.dart';
+import 'package:wayhunter_mobile/app/router/app_routes.dart';
+import 'package:wayhunter_mobile/core/auth/session_controller.dart';
+import 'package:wayhunter_mobile/core/network/api_client.dart';
+import 'package:wayhunter_mobile/core/storage/credential_store.dart';
+import 'package:wayhunter_mobile/features/wallet/domain/repositories/wallet_reader.dart';
 import 'package:wayhunter_mobile/features/wallet/domain/wallet_preview.dart';
 import 'package:wayhunter_mobile/features/wallet/presentation/wallet_screens.dart';
+import 'package:wayhunter_mobile/shared/domain/models/navigation_refs.dart';
+
+import '../../foundation/api_client_test.dart' show FakeTransport;
+import '../../foundation/session_and_device_test.dart'
+    show MemoryCredentialStore;
 
 Future<void> tapLabel(WidgetTester tester, String label) async {
   final target = find.text(label);
@@ -12,7 +25,225 @@ Future<void> tapLabel(WidgetTester tester, String label) async {
   await tester.pumpAndSettle();
 }
 
+class _Reader implements WalletReader {
+  Future<LiveWalletBalance?> Function() balance = () async =>
+      (posted: 310, reserved: 10, spendable: 300, lifetimeEarned: 510);
+  Future<WalletTransactionPage> Function(int, int) transactions =
+      (page, size) async => (
+        page: page,
+        pageSize: size,
+        totalCount: 0,
+        items: <LiveWalletTransaction>[],
+      );
+  Future<List<LiveVoucherOffer>> Function() offers = () async => [];
+  final pages = <int>[];
+
+  @override
+  Future<LiveWalletBalance?> readBalance() => balance();
+
+  @override
+  Future<WalletTransactionPage> readTransactions({
+    int page = 1,
+    int pageSize = 20,
+  }) {
+    pages.add(page);
+    return transactions(page, pageSize);
+  }
+
+  @override
+  Future<List<LiveVoucherOffer>> readOffers() => offers();
+}
+
 void main() {
+  testWidgets('Wallet route uses the shared session and clears data on sign-out', (
+    tester,
+  ) async {
+    final session = SessionController(MemoryCredentialStore());
+    addTearDown(session.dispose);
+    final transport = FakeTransport((request) async {
+      final body = request.uri.path.endsWith('/transactions')
+          ? '{"page":1,"pageSize":20,"totalCount":1,"items":[{"transactionId":"test","kind":1,"coinsAmount":777,"status":"Posted"}]}'
+          : '{"postedCoins":300,"reservedCoins":0,"spendableCoins":300,"lifetimeEarnedCoins":500}';
+      return TransportResponse(200, utf8.encode(body));
+    });
+    final router = AppRouter((_) {});
+    await tester.pumpWidget(
+      FoundationServices(
+        session: session,
+        api: ApiClient(
+          baseUrl: Uri.parse('https://example.invalid'),
+          transport: transport,
+          tokens: session,
+        ),
+        child: MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) =>
+                  router.destination(context, AppRoutes.wallet),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Wallet balance unavailable'), findsOneWidget);
+    expect(transport.requests, isEmpty);
+    await session.authenticate(
+      const SessionCredential(
+        user: UserRef('test-user'),
+        accessToken: 'route-test-token',
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('300'), findsOneWidget);
+    await tapLabel(tester, 'Transaction History');
+    expect(find.text('+777 Coins'), findsOneWidget);
+    expect(
+      transport.requests.map((request) => request.headers['Authorization']),
+      ['Bearer route-test-token', 'Bearer route-test-token'],
+    );
+    await session.clear();
+    await tester.pumpAndSettle();
+    expect(find.text('Wallet session changed'), findsOneWidget);
+    expect(find.text('+777 Coins'), findsNothing);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Wallet balance unavailable'), findsOneWidget);
+    expect(find.text('300'), findsNothing);
+  });
+
+  testWidgets('live balance loads, retries and isolates the debug demo', (
+    tester,
+  ) async {
+    final first = Completer<LiveWalletBalance?>();
+    final reader = _Reader();
+    final successfulBalance = reader.balance;
+    reader.balance = () => first.future;
+    await tester.pumpWidget(
+      MaterialApp(home: WalletHomeScreen(reader: reader)),
+    );
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    first.completeError(const ApiException(ApiError.server));
+    await tester.pumpAndSettle();
+    expect(find.text('Could not load Coins balance'), findsOneWidget);
+    reader.balance = successfulBalance;
+    await tapLabel(tester, 'Retry');
+    expect(find.text('300'), findsOneWidget);
+    expect(find.text('Reserved Coins · 10'), findsOneWidget);
+    expect(find.text('Posted balance · 310 Coins'), findsOneWidget);
+    expect(find.text('Lifetime-earned Coins · 510'), findsOneWidget);
+    expect(find.text('10,500'), findsNothing);
+    await tapLabel(tester, 'Open Wallet DEMO');
+    expect(find.text('DEMO · Sample data'), findsOneWidget);
+    expect(find.text('10,500'), findsOneWidget);
+    expect(find.text('Lifetime-earned Coins · 510'), findsNothing);
+    await tapLabel(tester, 'Transaction History');
+    expect(reader.pages, isEmpty);
+  });
+
+  testWidgets('live wallet shows empty balance, history and offers', (
+    tester,
+  ) async {
+    final reader = _Reader()..balance = () async => null;
+    await tester.pumpWidget(
+      MaterialApp(home: WalletHomeScreen(reader: reader)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('No Coins wallet found'), findsOneWidget);
+    await tapLabel(tester, 'Transaction History');
+    expect(find.text('No transactions on this page'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tapLabel(tester, 'Voucher Offers');
+    expect(find.text('No voucher offers'), findsOneWidget);
+  });
+
+  testWidgets('history retries the same page and navigates both directions', (
+    tester,
+  ) async {
+    final reader = _Reader();
+    var failSecondPage = true;
+    reader.transactions = (page, size) async {
+      if (page == 2 && failSecondPage) {
+        failSecondPage = false;
+        throw const ApiException(ApiError.network);
+      }
+      return (
+        page: page,
+        pageSize: size,
+        totalCount: size + 1,
+        items: [
+          (
+            id: 'row-$page',
+            kind: page == 1
+                ? WalletTransactionKind.reward
+                : WalletTransactionKind.hold,
+            coins: page == 1 ? 100 : -10000,
+            status: page == 1 ? 'Posted' : 'Pending',
+          ),
+        ],
+      );
+    };
+    await tester.pumpWidget(
+      MaterialApp(home: WalletHomeScreen(reader: reader)),
+    );
+    await tester.pumpAndSettle();
+    await tapLabel(tester, 'Transaction History');
+    expect(find.text('Reward'), findsOneWidget);
+    expect(find.text('+100 Coins'), findsOneWidget);
+    expect(find.text('Posted'), findsOneWidget);
+    await tapLabel(tester, 'Next page');
+    expect(find.text('Could not load transaction history'), findsOneWidget);
+    await tapLabel(tester, 'Retry');
+    expect(find.text('Page 2'), findsOneWidget);
+    expect(find.text('−10,000 Coins'), findsOneWidget);
+    expect(find.text('Pending'), findsOneWidget);
+    expect(
+      tester
+          .widget<TextButton>(find.widgetWithText(TextButton, 'Next page'))
+          .onPressed,
+      isNull,
+    );
+    await tapLabel(tester, 'Previous page');
+    expect(reader.pages, [1, 2, 2, 1]);
+  });
+
+  testWidgets('live offers show backend details with redemption unavailable', (
+    tester,
+  ) async {
+    final reader = _Reader();
+    final result = Completer<List<LiveVoucherOffer>>();
+    reader.offers = () => result.future;
+    await tester.pumpWidget(
+      MaterialApp(home: WalletHomeScreen(reader: reader)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Voucher Offers'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    result.complete([
+      (
+        id: 'offer-id',
+        code: 'SAMPLE-OFFER',
+        cost: 8000,
+        referenceValueLkr: 50,
+        validUntil: DateTime.utc(2027),
+        availableStock: 2,
+        isEligible: false,
+      ),
+    ]);
+    await tester.pumpAndSettle();
+    expect(find.text('8,000 Coins'), findsOneWidget);
+    expect(find.text('Available stock · 2'), findsOneWidget);
+    expect(find.text('Not eligible'), findsOneWidget);
+    await tapLabel(tester, 'SAMPLE-OFFER');
+    expect(find.text('Reference value · LKR 50.00'), findsOneWidget);
+    expect(find.text('Voucher redemption unavailable'), findsOneWidget);
+    expect(find.text('Review redemption'), findsNothing);
+    expect(find.text('DEMO · Sample data'), findsNothing);
+  });
+
   testWidgets('balance loads, retries after failure, and shows empty state', (
     tester,
   ) async {
