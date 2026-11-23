@@ -9,6 +9,7 @@ import 'package:wayhunter_mobile/features/games/presentation/game_playing.dart';
 import 'package:wayhunter_mobile/features/games/presentation/my_games.dart';
 import 'package:wayhunter_mobile/features/hunter/data/hunter_history_sources.dart';
 import 'package:wayhunter_mobile/features/hunter/presentation/hunter_screens.dart';
+import 'package:wayhunter_mobile/features/wallet/presentation/wallet_screens.dart';
 import 'package:wayhunter_mobile/shared/domain/models/navigation_refs.dart';
 import 'package:wayhunter_mobile/shared/widgets/starter_placeholder.dart';
 
@@ -27,7 +28,7 @@ final person2Routes = <String, RouteRegistration<Object?>>{
         StarterPlaceholder(title: '${module.title} leaderboard', owner: 'M5'),
   ),
   AppRoutes.wallet: RouteRegistration<Null>(
-    (_, arguments) => const StarterPlaceholder(title: 'Wallet', owner: 'M6'),
+    (_, _) => const WalletHomeScreen(embedded: true),
   ),
   AppRoutes.myHunts: RouteRegistration<Null>(
     (_, _) => const MyHuntsScreen(

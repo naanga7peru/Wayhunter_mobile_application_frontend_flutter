@@ -82,7 +82,7 @@ void main() {
         expect(switch (name) {
           'My Hunts' => find.text('Hunt history unavailable'),
           'My Games' => find.text('Game history unavailable'),
-          _ => find.textContaining('Starter placeholder'),
+          _ => find.text('Wallet balance unavailable'),
         }, findsOneWidget);
 
         await tester.pageBack();
