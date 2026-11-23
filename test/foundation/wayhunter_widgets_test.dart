@@ -127,7 +127,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Game'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Starter placeholder'), findsOneWidget);
+    expect(find.text('Game Zone'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(host(const Padding(

@@ -1,38 +1,40 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:wayhunter_mobile/app/router/app_routes.dart';
 import 'package:wayhunter_mobile/app/router/route_registration.dart';
-import 'package:wayhunter_mobile/app/wayhunter_module.dart'
-    show WayhunterModuleInfo;
+import 'package:wayhunter_mobile/features/games/presentation/game_creation.dart';
+import 'package:wayhunter_mobile/features/games/presentation/game_navigation.dart';
+import 'package:wayhunter_mobile/features/games/presentation/game_playing.dart';
+import 'package:wayhunter_mobile/features/games/presentation/my_games.dart';
+import 'package:wayhunter_mobile/features/hunter/data/hunter_history_sources.dart';
+import 'package:wayhunter_mobile/features/hunter/presentation/hunter_screens.dart';
+import 'package:wayhunter_mobile/features/leaderboards/presentation/leaderboard_screens.dart';
+import 'package:wayhunter_mobile/features/wallet/presentation/wallet_screens.dart';
 import 'package:wayhunter_mobile/shared/domain/models/navigation_refs.dart';
-import 'package:wayhunter_mobile/shared/widgets/starter_placeholder.dart';
 
 final person2Routes = <String, RouteRegistration<Object?>>{
-  AppRoutes.hunter: RouteRegistration<Null>(
-    (context, _) => StarterPlaceholder(
-      title: 'Location Hunter',
-      owner: 'M4',
-      action: TextButton(
-        onPressed: () => const AppDestination.addPlace(
-          PlaceRef('demo-hunter-place', source: PlaceSource.hunterApproved),
-        ).open(context),
-        child: const Text('SAMPLE: Preview adding a Hunter place to Traveler'),
-      ),
-    ),
+  AppRoutes.hunter: RouteRegistration<Null>((_, _) => const HunterHomeScreen()),
+  hunterAddNewPlaceRoute: RouteRegistration<Null>(
+    (_, _) => const AddNewPlaceScreen(),
   ),
-  AppRoutes.games: RouteRegistration<Null>(
-    (_, arguments) => const StarterPlaceholder(title: 'Game', owner: 'M5'),
+  AppRoutes.games: RouteRegistration<Null>((_, _) => const GameZoneScreen()),
+  createGameRoute: RouteRegistration<Null>((_, _) => const CreateGameScreen()),
+  playGameRoute: RouteRegistration<Null>(
+    (_, _) => const PlayGameScreen(enableDemo: kDebugMode),
   ),
   AppRoutes.leaderboard: RouteRegistration<ModuleId>(
     (_, module) =>
-        StarterPlaceholder(title: '${module.title} leaderboard', owner: 'M5'),
+        LeaderboardHomeScreen(key: ValueKey(module), initialModule: module),
   ),
   AppRoutes.wallet: RouteRegistration<Null>(
-    (_, arguments) => const StarterPlaceholder(title: 'Wallet', owner: 'M6'),
+    (_, _) => const WalletHomeScreen(embedded: true),
   ),
   AppRoutes.myHunts: RouteRegistration<Null>(
-    (_, arguments) => const StarterPlaceholder(title: 'My Hunts', owner: 'M4'),
+    (_, _) => const MyHuntsScreen(
+      history: UnavailableHunterHistory(),
+      demoHistory: kDebugMode ? DemoHunterHistory() : null,
+    ),
   ),
   AppRoutes.myGames: RouteRegistration<Null>(
-    (_, arguments) => const StarterPlaceholder(title: 'My Games', owner: 'M5'),
+    (_, _) => const MyGamesScreen(enableDemo: kDebugMode),
   ),
 };

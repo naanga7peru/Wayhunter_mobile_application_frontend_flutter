@@ -52,7 +52,11 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(const WayhunterApp());
-    for (final name in ['Traveler', 'Location Hunter', 'Game']) {
+    for (final (name, category) in [
+      ('Traveler', 'Traveller'),
+      ('Location Hunter', 'Hunter'),
+      ('Game', 'Game'),
+    ]) {
       await tester.tap(find.text(name).first);
       await tester.pumpAndSettle();
       expect(
@@ -62,59 +66,37 @@ void main() {
 
       await tester.tap(find.text('Leaderboard'));
       await tester.pumpAndSettle();
-      expect(find.text('$name leaderboard'), findsOneWidget);
+      expect(find.text('$category rankings'), findsOneWidget);
+      expect(find.text('Rankings unavailable'), findsOneWidget);
+      expect(find.byType(NavigationBar), findsOneWidget);
 
       await tester.tap(find.text('Home'));
       await tester.pumpAndSettle();
     }
   });
 
-  testWidgets('Profile opens Person 2 previews and Back returns to Profile', (
-    tester,
-  ) async {
-    await tester.pumpWidget(const WayhunterApp());
-    await tester.tap(find.text('Profile'));
-    await tester.pumpAndSettle();
-    for (final name in ['Wallet', 'My Hunts', 'My Games']) {
-      await tester.tap(find.text(name));
+  testWidgets(
+    'Profile opens Person 2 destinations and Back returns to Profile',
+    (tester) async {
+      await tester.pumpWidget(const WayhunterApp());
+      await tester.tap(find.text('Profile'));
       await tester.pumpAndSettle();
-      expect(find.text(name), findsOneWidget);
-      expect(find.textContaining('Starter placeholder'), findsOneWidget);
+      for (final name in ['Wallet', 'My Hunts', 'My Games']) {
+        await tester.tap(find.text(name));
+        await tester.pumpAndSettle();
+        expect(find.text(name), findsOneWidget);
+        expect(switch (name) {
+          'My Hunts' => find.text('Hunt history unavailable'),
+          'My Games' => find.text('Game history unavailable'),
+          _ => find.text('Wallet balance unavailable'),
+        }, findsOneWidget);
 
-      await tester.pageBack();
-      await tester.pumpAndSettle();
-      expect(find.text('Development preview'), findsOneWidget);
-    }
-  });
-
-  testWidgets('Hunter hands a typed PlaceRef to Traveller and Back returns', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      const WayhunterApp(environmentLabel: 'development'),
-    );
-    await tester.tap(find.text('Location Hunter'));
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.text('SAMPLE: Preview adding a Hunter place to Traveler'),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Add place to trip'), findsOneWidget);
-    expect(
-      find.text('SAMPLE PREVIEW: Hunter place (backend approval unverified)'),
-      findsOneWidget,
-    );
-    expect(find.text('Source: Hunter-approved place'), findsNothing);
-    expect(find.textContaining('Starter placeholder'), findsOneWidget);
-
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-    expect(
-      find.text('SAMPLE: Preview adding a Hunter place to Traveler'),
-      findsOneWidget,
-    );
-  });
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+        expect(find.text('Development preview'), findsOneWidget);
+      }
+    },
+  );
 
   testWidgets(
     'unknown routes, wrong types, and invalid IDs show a safe fallback',
