@@ -1,8 +1,17 @@
-
 import 'package:flutter/material.dart';
+import 'package:wayhunter_mobile/features/auth/presentation/auth_form.dart';
 
 class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({super.key});
+  const RegisterScreen({super.key, this.onSubmit, this.onRegistered});
+
+  final Future<void> Function(
+    String displayName,
+    String email,
+    String password,
+    String confirmPassword,
+  )?
+  onSubmit;
+  final ValueChanged<String>? onRegistered;
 
   @override
   State<RegisterScreen> createState() => _RegisterScreenState();
@@ -16,12 +25,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
 
+  bool _submitting = false;
+  String? _error;
   bool _showPassword = false;
   bool _showConfirmPassword = false;
 
-  final _emailPattern = RegExp(
-    r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
-  );
+  final _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
   @override
   void dispose() {
@@ -32,20 +41,44 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  void _validateRegistration() {
+  Future<void> _validateRegistration() async {
+    if (_submitting) return;
     FocusScope.of(context).unfocus();
 
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    // M1-MS03-T01: UI validation only.
-    // Registration API integration comes in T02.
+    final submit = widget.onSubmit;
+    if (submit != null) {
+      final email = _emailController.text.trim();
+      setState(() {
+        _submitting = true;
+        _error = null;
+      });
+      try {
+        await submit(
+          _nameController.text.trim(),
+          email,
+          _passwordController.text,
+          _confirmController.text,
+        );
+        if (mounted) {
+          _passwordController.clear();
+          _confirmController.clear();
+          widget.onRegistered?.call(email);
+        }
+      } catch (error) {
+        if (mounted) setState(() => _error = authErrorMessage(error));
+      } finally {
+        if (mounted) setState(() => _submitting = false);
+      }
+      return;
+    }
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text(
-          'Form valid. Registration API not connected yet.',
-        ),
+        content: Text('Form valid. Registration API not connected yet.'),
       ),
     );
   }
@@ -54,24 +87,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0A1420),
-      appBar: AppBar(
-        title: const Text('Create Account'),
-      ),
+      appBar: AppBar(title: const Text('Create Account')),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(
-                maxWidth: 440,
-              ),
+              constraints: const BoxConstraints(maxWidth: 440),
               child: Form(
                 key: _formKey,
-                autovalidateMode:
-                    AutovalidateMode.onUserInteraction,
+                autovalidateMode: AutovalidateMode.onUserInteraction,
                 child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.stretch,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const Icon(
                       Icons.explore,
@@ -96,12 +123,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                     TextFormField(
                       controller: _nameController,
+                      enabled: !_submitting,
                       textInputAction: TextInputAction.next,
                       decoration: const InputDecoration(
                         labelText: 'Full Name',
-                        prefixIcon: Icon(
-                          Icons.person_outline,
-                        ),
+                        prefixIcon: Icon(Icons.person_outline),
                         border: OutlineInputBorder(),
                       ),
                       validator: (value) {
@@ -123,14 +149,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                     TextFormField(
                       controller: _emailController,
-                      keyboardType:
-                          TextInputType.emailAddress,
+                      enabled: !_submitting,
+                      keyboardType: TextInputType.emailAddress,
                       textInputAction: TextInputAction.next,
                       decoration: const InputDecoration(
                         labelText: 'Email',
-                        prefixIcon: Icon(
-                          Icons.email_outlined,
-                        ),
+                        prefixIcon: Icon(Icons.email_outlined),
                         border: OutlineInputBorder(),
                       ),
                       validator: (value) {
@@ -152,13 +176,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                     TextFormField(
                       controller: _passwordController,
+                      enabled: !_submitting,
                       obscureText: !_showPassword,
                       textInputAction: TextInputAction.next,
                       decoration: InputDecoration(
                         labelText: 'Password',
-                        prefixIcon: const Icon(
-                          Icons.lock_outline,
-                        ),
+                        prefixIcon: const Icon(Icons.lock_outline),
                         border: const OutlineInputBorder(),
                         suffixIcon: IconButton(
                           icon: Icon(
@@ -190,13 +213,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                     TextFormField(
                       controller: _confirmController,
+                      enabled: !_submitting,
                       obscureText: !_showConfirmPassword,
                       textInputAction: TextInputAction.done,
                       decoration: InputDecoration(
                         labelText: 'Confirm Password',
-                        prefixIcon: const Icon(
-                          Icons.lock_reset,
-                        ),
+                        prefixIcon: const Icon(Icons.lock_reset),
                         border: const OutlineInputBorder(),
                         suffixIcon: IconButton(
                           icon: Icon(
@@ -206,8 +228,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           ),
                           onPressed: () {
                             setState(() {
-                              _showConfirmPassword =
-                                  !_showConfirmPassword;
+                              _showConfirmPassword = !_showConfirmPassword;
                             });
                           },
                         ),
@@ -217,8 +238,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           return 'Confirm your password';
                         }
 
-                        if (value !=
-                            _passwordController.text) {
+                        if (value != _passwordController.text) {
                           return 'Passwords do not match';
                         }
 
@@ -229,12 +249,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     const SizedBox(height: 24),
 
                     FilledButton(
-                      onPressed: _validateRegistration,
-                      child: const Padding(
-                        padding: EdgeInsets.all(14),
-                        child: Text('Create Account'),
+                      onPressed: _submitting ? null : _validateRegistration,
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Text(
+                          _submitting
+                              ? 'Creating account...'
+                              : 'Create Account',
+                        ),
                       ),
                     ),
+                    if (_error case final message?)
+                      Semantics(liveRegion: true, child: Text(message)),
                   ],
                 ),
               ),

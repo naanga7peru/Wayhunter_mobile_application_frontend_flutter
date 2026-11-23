@@ -5,15 +5,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wayhunter_mobile/app/bootstrap/foundation_services.dart';
 import 'package:wayhunter_mobile/app/router/app_routes.dart';
+import 'package:wayhunter_mobile/app/wayhunter_app.dart';
 import 'package:wayhunter_mobile/core/auth/session_controller.dart';
 import 'package:wayhunter_mobile/core/network/api_client.dart';
 import 'package:wayhunter_mobile/core/storage/credential_store.dart';
-import 'package:wayhunter_mobile/shared/domain/models/navigation_refs.dart';
-import 'package:wayhunter_mobile/app/wayhunter_app.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_controls.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_states.dart';
+import 'package:wayhunter_mobile/features/auth/presentation/views/sign_in_screen.dart';
 import 'package:wayhunter_mobile/features/games/presentation/game_navigation.dart';
 import 'package:wayhunter_mobile/features/games/presentation/my_games.dart';
+import 'package:wayhunter_mobile/shared/domain/models/navigation_refs.dart';
 
 void main() {
   testWidgets('Game draft validates, reorders hints and returns for edits', (
@@ -142,16 +143,25 @@ void main() {
     'Discovery loads server games, opens details and keeps demo isolated',
     (tester) async {
       final pending = Completer<TransportResponse>();
+      final now = DateTime.now().toUtc();
+      final game = {
+        'gameId': _gameId,
+        'title': 'Live trail',
+        'description': 'A server description.',
+        'durationMinutes': 30,
+        'publishedAtUtc': now.toIso8601String(),
+        'expiresAtUtc': now.add(const Duration(days: 30)).toIso8601String(),
+      };
       final transport = _GamesTransport()
         ..respond = (request) async => request.uri.path.endsWith(_gameId)
-            ? _response({..._game, 'stageCount': 3})
+            ? _response({...game, 'stageCount': 3})
             : pending.future;
-      final session = await _openAuthenticatedGameZone(tester, transport);
+      await _openAuthenticatedGameZone(tester, transport);
       await tester.tap(find.text('Play Game'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.byType(WayhunterLoadingView), findsOneWidget);
-      pending.complete(_response([_game]));
+      pending.complete(_response([game]));
       await tester.pumpAndSettle();
       expect(find.text('Live trail'), findsOneWidget);
       expect(find.text('Coastal Clues'), findsNothing);
@@ -166,18 +176,18 @@ void main() {
             .onPressed,
         isNull,
       );
-      expect(transport.requests.last.uri.path, '/api/mobile/games/$_gameId');
-
-      await session.clear();
-      await tester.pumpAndSettle();
-      expect(find.text('Game details unavailable'), findsOneWidget);
-      expect(find.text('Live trail'), findsNothing);
+      expect(
+        transport.gameRequests.last.uri.path,
+        '/api/mobile/games/$_gameId',
+      );
       await tester.pageBack();
       await tester.pumpAndSettle();
       await _tap(tester, 'Browse DEMO games');
       expect(find.text('Coastal Clues'), findsOneWidget);
       expect(find.text('Live trail'), findsNothing);
-      expect(transport.requests, hasLength(2));
+      expect(transport.gameRequests, hasLength(2));
+      await _signOut(tester, transport);
+      expect(find.text('Live trail'), findsNothing);
     },
   );
 
@@ -199,6 +209,7 @@ void main() {
       await _tap(tester, 'Retry');
       expect(find.text('No available games'), findsOneWidget);
       expect(find.text('Coastal Clues'), findsNothing);
+      expect(transport.gameRequests, hasLength(3));
     },
   );
 
@@ -218,9 +229,20 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.byType(WayhunterLoadingView), findsOneWidget);
 
-      await session.authenticate(
-        const SessionCredential(user: UserRef('second'), accessToken: 'second'),
-      );
+      await _signOut(tester, transport);
+      expect(session.accessToken, isNull);
+      expect(find.text('Player history'), findsNothing);
+
+      final fields = find.byType(TextFormField);
+      await tester.enterText(fields.first, 'second@example.invalid');
+      await tester.enterText(fields.last, 'SyntheticPassword42');
+      await _tapFinder(tester, find.widgetWithText(FilledButton, 'Sign In'));
+      expect(session.state.user?.id, 'second');
+      expect(find.text('Choose a module'), findsOneWidget);
+      expect(find.text('Player history'), findsNothing);
+      expect(_navigator(tester).canPop(), isFalse);
+      await _selectGameModule(tester);
+      await _tap(tester, 'My Game Attempts');
       await tester.pumpAndSettle();
       expect(find.text('Player history'), findsOneWidget);
       expect(find.text('Waiting for verification'), findsOneWidget);
@@ -234,20 +256,20 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Rejected'), findsNothing);
       expect(
-        transport.requests.map((r) => r.uri.path),
+        transport.gameRequests.map((r) => r.uri.path),
         everyElement('/api/mobile/games/me/attempts'),
       );
-
-      await session.clear();
-      await tester.pumpAndSettle();
-      expect(find.text('Player history unavailable'), findsOneWidget);
-      expect(find.text('Attempt ID: $_attemptId'), findsNothing);
+      expect(transport.gameRequests.map((r) => r.headers['Authorization']), [
+        'Bearer first',
+        'Bearer second',
+      ]);
       await tester.pageBack();
       await tester.pumpAndSettle();
       await _tap(tester, 'My Games');
       expect(find.text('Game history unavailable'), findsOneWidget);
       expect(find.text('Player history'), findsNothing);
-      expect(transport.requests, hasLength(2));
+      expect(find.text('Attempt ID: $_attemptId'), findsNothing);
+      expect(transport.gameRequests, hasLength(2));
     },
   );
 
@@ -273,8 +295,29 @@ void main() {
 
 Future<void> _openGameZone(WidgetTester tester) async {
   await tester.pumpWidget(const WayhunterApp());
+  await _selectGameModule(tester);
+}
+
+Future<void> _selectGameModule(WidgetTester tester) async {
   await _tapFinder(tester, find.text('Game').first);
   expect(find.text('Game Zone'), findsOneWidget);
+}
+
+NavigatorState _navigator(WidgetTester tester) =>
+    tester.state<NavigatorState>(find.byType(Navigator));
+
+Future<void> _signOut(WidgetTester tester, _GamesTransport transport) async {
+  final protectedNavigator = _navigator(tester);
+  unawaited(protectedNavigator.pushNamed<void>(AppRoutes.profile));
+  await tester.pumpAndSettle();
+  await _tap(tester, 'Sign out');
+  expect(transport.logoutRequests, 1);
+  expect(protectedNavigator.mounted, isFalse);
+  expect(find.byType(SignInScreen), findsOneWidget);
+  expect(_navigator(tester).canPop(), isFalse);
+  await tester.binding.handlePopRoute();
+  await tester.pumpAndSettle();
+  expect(find.byType(SignInScreen), findsOneWidget);
 }
 
 Future<void> _tap(WidgetTester tester, String label) =>
@@ -296,14 +339,6 @@ Future<void> _enter(WidgetTester tester, String label, String value) async {
 const _gameId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 const _attemptId = '11111111-2222-3333-4444-555555555555';
 const _timestamp = '2026-11-23T08:00:00Z';
-const _game = {
-  'gameId': _gameId,
-  'title': 'Live trail',
-  'description': 'A server description.',
-  'durationMinutes': 30,
-  'publishedAtUtc': _timestamp,
-  'expiresAtUtc': '2026-12-23T08:00:00Z',
-};
 const _attempt = {
   'attemptId': _attemptId,
   'gameId': _gameId,
@@ -316,13 +351,10 @@ const _attempt = {
 
 Future<SessionController> _openAuthenticatedGameZone(
   WidgetTester tester,
-  HttpTransport transport,
+  _GamesTransport transport,
 ) async {
   final session = SessionController(_TestStore());
   addTearDown(session.dispose);
-  await session.authenticate(
-    const SessionCredential(user: UserRef('first'), accessToken: 'first'),
-  );
   await tester.pumpWidget(
     FoundationServices(
       session: session,
@@ -331,10 +363,13 @@ Future<SessionController> _openAuthenticatedGameZone(
         tokens: session,
         transport: transport,
       ),
-      child: const WayhunterApp(),
+      child: const WayhunterApp.authenticated(apiConfigured: true),
     ),
   );
-  await _tapFinder(tester, find.text('Game').first);
+  await tester.pumpAndSettle();
+  expect(session.state.user?.id, 'first');
+  expect(transport.gameRequests, isEmpty);
+  await _selectGameModule(tester);
   return session;
 }
 
@@ -342,23 +377,58 @@ TransportResponse _response(Object? data, [int status = 200]) =>
     TransportResponse(status, utf8.encode(jsonEncode(data)));
 
 class _GamesTransport implements HttpTransport {
-  final requests = <TransportRequest>[];
+  final gameRequests = <TransportRequest>[];
+  int logoutRequests = 0;
   late Future<TransportResponse> Function(TransportRequest) respond;
 
   @override
-  Future<TransportResponse> send(TransportRequest request) {
-    requests.add(request);
-    return respond(request);
+  Future<TransportResponse> send(TransportRequest request) async {
+    final bearer = request.headers['Authorization'];
+    switch ((request.method, request.uri.path)) {
+      case (ApiMethod.get, '/api/mobile/identity/me'):
+        expect(bearer, anyOf('Bearer first', 'Bearer second'));
+        return _response({
+          'userId': bearer == 'Bearer first' ? 'first' : 'second',
+          'displayName': 'Synthetic visitor',
+          'email': 'visitor@example.invalid',
+        });
+      case (ApiMethod.get, '/api/mobile/advertisements/active'):
+        return _response([]);
+      case (ApiMethod.post, '/api/mobile/auth/logout'):
+        expect(bearer, 'Bearer first');
+        logoutRequests++;
+        return const TransportResponse(204, []);
+      case (ApiMethod.post, '/api/mobile/identity/login'):
+        expect(jsonDecode(request.body!)['email'], 'second@example.invalid');
+        return _response({
+          'userId': 'second',
+          'accessToken': 'second',
+          'expiresAtUtc': '2099-01-01T00:00:00Z',
+        });
+      case (ApiMethod.get, final path)
+          when path == '/api/mobile/games' ||
+              path.startsWith('/api/mobile/games/'):
+        expect(bearer, anyOf('Bearer first', 'Bearer second'));
+        gameRequests.add(request);
+        return respond(request);
+      default:
+        fail('Unexpected request: ${request.method} ${request.uri.path}');
+    }
   }
 }
 
 class _TestStore implements CredentialStore {
-  @override
-  Future<void> clear() async {}
+  SessionCredential? _value = const SessionCredential(
+    user: UserRef('first'),
+    accessToken: 'first',
+  );
 
   @override
-  Future<SessionCredential?> read() async => null;
+  Future<void> clear() async => _value = null;
 
   @override
-  Future<void> write(SessionCredential credential) async {}
+  Future<SessionCredential?> read() async => _value;
+
+  @override
+  Future<void> write(SessionCredential credential) async => _value = credential;
 }
