@@ -3,6 +3,9 @@ import 'package:wayhunter_mobile/app/router/app_routes.dart';
 import 'package:wayhunter_mobile/app/router/route_registration.dart';
 import 'package:wayhunter_mobile/app/wayhunter_module.dart'
     show WayhunterModuleInfo;
+import 'package:wayhunter_mobile/features/games/presentation/game_creation.dart';
+import 'package:wayhunter_mobile/features/games/presentation/game_navigation.dart';
+import 'package:wayhunter_mobile/features/games/presentation/my_games.dart';
 import 'package:wayhunter_mobile/features/hunter/data/hunter_history_sources.dart';
 import 'package:wayhunter_mobile/features/hunter/presentation/hunter_screens.dart';
 import 'package:wayhunter_mobile/shared/domain/models/navigation_refs.dart';
@@ -13,9 +16,9 @@ final person2Routes = <String, RouteRegistration<Object?>>{
   hunterAddNewPlaceRoute: RouteRegistration<Null>(
     (_, _) => const AddNewPlaceScreen(),
   ),
-  AppRoutes.games: RouteRegistration<Null>(
-    (_, arguments) => const StarterPlaceholder(title: 'Game', owner: 'M5'),
-  ),
+  AppRoutes.games: RouteRegistration<Null>((_, _) => const GameZoneScreen()),
+  createGameRoute: RouteRegistration<Null>((_, _) => const CreateGameScreen()),
+  playGameRoute: RouteRegistration<Null>((_, _) => const PlayGameScreen()),
   AppRoutes.leaderboard: RouteRegistration<ModuleId>(
     (_, module) =>
         StarterPlaceholder(title: '${module.title} leaderboard', owner: 'M5'),
@@ -30,6 +33,6 @@ final person2Routes = <String, RouteRegistration<Object?>>{
     ),
   ),
   AppRoutes.myGames: RouteRegistration<Null>(
-    (_, arguments) => const StarterPlaceholder(title: 'My Games', owner: 'M5'),
+    (_, _) => const MyGamesScreen(enableDemo: kDebugMode),
   ),
 };

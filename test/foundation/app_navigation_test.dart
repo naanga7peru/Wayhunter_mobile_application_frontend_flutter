@@ -79,12 +79,11 @@ void main() {
         await tester.tap(find.text(name));
         await tester.pumpAndSettle();
         expect(find.text(name), findsOneWidget);
-        expect(
-          name == 'My Hunts'
-              ? find.text('Hunt history unavailable')
-              : find.textContaining('Starter placeholder'),
-          findsOneWidget,
-        );
+        expect(switch (name) {
+          'My Hunts' => find.text('Hunt history unavailable'),
+          'My Games' => find.text('Game history unavailable'),
+          _ => find.textContaining('Starter placeholder'),
+        }, findsOneWidget);
 
         await tester.pageBack();
         await tester.pumpAndSettle();
