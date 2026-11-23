@@ -5,6 +5,7 @@ import 'package:wayhunter_mobile/app/wayhunter_module.dart'
     show WayhunterModuleInfo;
 import 'package:wayhunter_mobile/features/games/presentation/game_creation.dart';
 import 'package:wayhunter_mobile/features/games/presentation/game_navigation.dart';
+import 'package:wayhunter_mobile/features/games/presentation/game_playing.dart';
 import 'package:wayhunter_mobile/features/games/presentation/my_games.dart';
 import 'package:wayhunter_mobile/features/hunter/data/hunter_history_sources.dart';
 import 'package:wayhunter_mobile/features/hunter/presentation/hunter_screens.dart';
@@ -18,7 +19,9 @@ final person2Routes = <String, RouteRegistration<Object?>>{
   ),
   AppRoutes.games: RouteRegistration<Null>((_, _) => const GameZoneScreen()),
   createGameRoute: RouteRegistration<Null>((_, _) => const CreateGameScreen()),
-  playGameRoute: RouteRegistration<Null>((_, _) => const PlayGameScreen()),
+  playGameRoute: RouteRegistration<Null>(
+    (_, _) => const PlayGameScreen(enableDemo: kDebugMode),
+  ),
   AppRoutes.leaderboard: RouteRegistration<ModuleId>(
     (_, module) =>
         StarterPlaceholder(title: '${module.title} leaderboard', owner: 'M5'),

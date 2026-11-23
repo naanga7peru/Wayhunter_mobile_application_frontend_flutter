@@ -3,7 +3,6 @@ import 'package:wayhunter_mobile/app/router/app_routes.dart';
 import 'package:wayhunter_mobile/core/theme/wayhunter_tokens.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_controls.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_page.dart';
-import 'package:wayhunter_mobile/core/widgets/wayhunter_states.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_surface.dart';
 import 'package:wayhunter_mobile/shared/domain/models/navigation_refs.dart';
 
@@ -46,17 +45,6 @@ class GameZoneScreen extends StatelessWidget {
         ),
       ),
     ],
-  );
-}
-
-class PlayGameScreen extends StatelessWidget {
-  const PlayGameScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) => const WayhunterUnavailableView(
-    title: 'Play Game unavailable',
-    message:
-        'Game discovery and player attempts require the connected game service.',
   );
 }
 

@@ -83,7 +83,7 @@ void main() {
   ) async {
     await _openGameZone(tester);
     await _tap(tester, 'Play Game');
-    expect(find.text('Play Game unavailable'), findsOneWidget);
+    expect(find.text('Live discovery unavailable'), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
     await _tap(tester, 'My Games');
