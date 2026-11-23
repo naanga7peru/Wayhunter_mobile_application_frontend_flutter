@@ -14,6 +14,7 @@ import 'package:wayhunter_mobile/features/notifications/data/notifications_api.d
 import 'package:wayhunter_mobile/features/notifications/presentation/notifications_screen.dart';
 import 'package:wayhunter_mobile/features/profile/data/my_profile_api.dart';
 import 'package:wayhunter_mobile/features/profile/presentation/my_profile_screen.dart';
+import 'package:wayhunter_mobile/features/settings/presentation/settings_screen.dart';
 import 'package:wayhunter_mobile/features/traveller/active_trip/data/trip_sessions_api.dart';
 import 'package:wayhunter_mobile/features/traveller/active_trip/presentation/active_trip_screen.dart';
 import 'package:wayhunter_mobile/features/traveller/planning/data/trip_plans_api.dart';
@@ -91,6 +92,15 @@ Map<String, RouteRegistration<Object?>> person1Routes(
         (services) => FriendsScreen(api: friends(services), trip: trip),
       ),
       validate: (trip) => isInvitationGuid(trip.id),
+    ),
+    settingsRoute: RouteRegistration<Null>(
+      (context, _) => _withFoundation(
+        context,
+        (services) => SettingsScreen(
+          permissions: services.permissions,
+          notifications: NotificationsApi(services.api, services.session),
+        ),
+      ),
     ),
     notificationsRoute: RouteRegistration<Null>(
       (context, _) => _withFoundation(

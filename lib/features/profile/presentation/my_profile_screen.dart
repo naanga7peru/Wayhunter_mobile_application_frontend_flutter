@@ -9,6 +9,7 @@ import 'package:wayhunter_mobile/features/friends/presentation/friends_screen.da
 import 'package:wayhunter_mobile/features/notifications/presentation/notifications_screen.dart';
 import 'package:wayhunter_mobile/features/profile/data/my_profile_api.dart';
 import 'package:wayhunter_mobile/features/profile/presentation/account_read_panel.dart';
+import 'package:wayhunter_mobile/features/settings/presentation/settings_screen.dart';
 
 class MyProfileScreen extends StatelessWidget {
   const MyProfileScreen({super.key, this.api});
@@ -66,11 +67,14 @@ class MyProfileScreen extends StatelessWidget {
             title: const Text('Friends'),
             onTap: () => const AppDestination(friendsRoute).open(context),
           ),
-          for (final label in ['Edit Profile', 'Settings'])
-            ListTile(
-              title: Text(label),
-              onTap: () => _unavailable(context, label),
-            ),
+          ListTile(
+            title: const Text('Edit Profile'),
+            onTap: () => _unavailable(context, 'Edit Profile'),
+          ),
+          ListTile(
+            title: const Text('Settings'),
+            onTap: () => const AppDestination(settingsRoute).open(context),
+          ),
           ListTile(
             title: const Text('Notifications'),
             onTap: () => const AppDestination(notificationsRoute).open(context),
