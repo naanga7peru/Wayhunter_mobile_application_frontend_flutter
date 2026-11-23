@@ -1,21 +1,28 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:wayhunter_mobile/app/bootstrap/foundation_services.dart';
+import 'package:wayhunter_mobile/core/network/api_client.dart';
 import 'package:wayhunter_mobile/core/theme/wayhunter_tokens.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_controls.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_page.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_states.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_surface.dart';
+import 'package:wayhunter_mobile/shared/presentation/person2_content.dart';
 
+import '../domain/repositories/wallet_reader.dart';
 import '../domain/wallet_preview.dart';
 
 class WalletHomeScreen extends StatelessWidget {
-  const WalletHomeScreen({super.key, this.embedded = false});
+  const WalletHomeScreen({super.key, this.embedded = false, this.reader});
+
+  final WalletReader? reader;
 
   final bool embedded;
 
   @override
   Widget build(BuildContext context) => _WalletHome(
     demo: false,
+    reader: reader,
     embedded: embedded,
     readBalance: () async => null,
   );
@@ -32,11 +39,13 @@ class _WalletHome extends StatefulWidget {
   const _WalletHome({
     required this.demo,
     required this.readBalance,
+    this.reader,
     this.embedded = false,
   });
 
   final bool demo;
   final Future<WalletBalance?> Function() readBalance;
+  final WalletReader? reader;
   final bool embedded;
 
   @override
@@ -59,55 +68,67 @@ class _WalletHomeState extends State<_WalletHome> {
     demo: widget.demo,
     embedded: widget.embedded,
     children: [
-      FutureBuilder<WalletBalance?>(
-        future: _balance,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const WayhunterLoadingView(label: 'Loading Coins balance');
-          }
-          if (snapshot.hasError) {
-            return WayhunterErrorView(
-              title: 'Could not load Coins balance',
-              onRetry: _retry,
+      if (widget.reader case final reader?)
+        _WalletRead<LiveWalletBalance?>(
+          key: ObjectKey(reader),
+          label: 'Coins balance',
+          read: reader.readBalance,
+          content: (balance) => balance == null
+              ? const WayhunterEmptyView(title: 'No Coins wallet found')
+              : _BalanceCard(
+                  spendable: balance.spendable,
+                  reserved: balance.reserved,
+                  posted: balance.posted,
+                  lifetimeEarned: balance.lifetimeEarned,
+                ),
+        )
+      else
+        FutureBuilder<WalletBalance?>(
+          future: _balance,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const WayhunterLoadingView(label: 'Loading Coins balance');
+            }
+            if (snapshot.hasError) {
+              return WayhunterErrorView(
+                title: 'Could not load Coins balance',
+                onRetry: _retry,
+              );
+            }
+            final balance = snapshot.data;
+            if (balance == null) {
+              return widget.demo
+                  ? const WayhunterEmptyView(title: 'No sample balance')
+                  : const WayhunterUnavailableView(
+                      title: 'Wallet balance unavailable',
+                    );
+            }
+            return _BalanceCard(
+              spendable: balance.spendable,
+              reserved: balance.reserved,
+              posted: balance.posted,
             );
-          }
-          final balance = snapshot.data;
-          if (balance == null) {
-            return widget.demo
-                ? const WayhunterEmptyView(title: 'No sample balance')
-                : const WayhunterUnavailableView(
-                    title: 'Wallet balance unavailable',
-                  );
-          }
-          return WayhunterSurfaceCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Spendable Coins',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                Text(
-                  formatCoins(balance.spendable),
-                  style: Theme.of(context).textTheme.headlineMedium,
-                ),
-                Text('Reserved Coins · ${formatCoins(balance.reserved)}'),
-                Text('Posted balance · ${formatCoins(balance.posted)} Coins'),
-              ],
-            ),
-          );
-        },
-      ),
+          },
+        ),
       _WalletLink(
         title: 'Transaction History',
         icon: Icons.receipt_long_outlined,
-        onTap: () => _open(context, _History(demo: widget.demo)),
+        onTap: () => _open(
+          context,
+          widget.reader != null
+              ? _LiveHistory(reader: widget.reader!)
+              : _History(demo: widget.demo),
+        ),
       ),
       _WalletLink(
         title: 'Voucher Offers',
         icon: Icons.local_offer_outlined,
-        onTap: () =>
-            _open(context, _Offers(demo: widget.demo, balance: _balance)),
+        onTap: () => _open(
+          context,
+          widget.reader != null
+              ? _LiveOffers(reader: widget.reader!)
+              : _Offers(demo: widget.demo, balance: _balance),
+        ),
       ),
       _WalletLink(
         title: 'My Vouchers',
@@ -121,6 +142,99 @@ class _WalletHomeState extends State<_WalletHome> {
               _open(context, walletPreview(() async => demoBalance)),
         ),
     ],
+  );
+}
+
+class _WalletRead<T> extends StatefulWidget {
+  const _WalletRead({
+    super.key,
+    required this.label,
+    required this.read,
+    required this.content,
+  });
+
+  final String label;
+  final Future<T> Function() read;
+  final Widget Function(T) content;
+
+  @override
+  State<_WalletRead<T>> createState() => _WalletReadState<T>();
+}
+
+class _WalletReadState<T> extends State<_WalletRead<T>> {
+  late Future<T> _result = widget.read();
+
+  void _retry() {
+    final result = widget.read();
+    setState(() {
+      _result = result;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<T>(
+    future: _result,
+    builder: (context, snapshot) {
+      if (snapshot.connectionState != ConnectionState.done) {
+        return WayhunterLoadingView(label: 'Loading ${widget.label}');
+      }
+      if (snapshot.hasError) {
+        final error = snapshot.error;
+        final message = switch (error) {
+          ApiException(kind: ApiError.unauthorized) =>
+            'An authenticated mobile session is required.',
+          ApiException(kind: ApiError.forbidden) => 'The server denied access.',
+          _ => null,
+        };
+        if (error is ApiException && error.kind == ApiError.unavailable) {
+          return WayhunterUnavailableView(
+            title: '${widget.label} unavailable',
+            action: WayhunterButton.secondary(
+              label: 'Retry',
+              onPressed: _retry,
+            ),
+          );
+        }
+        return WayhunterErrorView(
+          title: 'Could not load ${widget.label}',
+          message: message,
+          onRetry: _retry,
+        );
+      }
+      return widget.content(snapshot.data as T);
+    },
+  );
+}
+
+class _BalanceCard extends StatelessWidget {
+  const _BalanceCard({
+    required this.spendable,
+    required this.reserved,
+    required this.posted,
+    this.lifetimeEarned,
+  });
+
+  final int spendable;
+  final int reserved;
+  final int posted;
+  final int? lifetimeEarned;
+
+  @override
+  Widget build(BuildContext context) => WayhunterSurfaceCard(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Spendable Coins', style: Theme.of(context).textTheme.titleMedium),
+        Text(
+          formatCoins(spendable),
+          style: Theme.of(context).textTheme.headlineMedium,
+        ),
+        Text('Reserved Coins · ${formatCoins(reserved)}'),
+        Text('Posted balance · ${formatCoins(posted)} Coins'),
+        if (lifetimeEarned case final earned?)
+          Text('Lifetime-earned Coins · ${formatCoins(earned)}'),
+      ],
+    ),
   );
 }
 
@@ -145,7 +259,7 @@ class _History extends StatelessWidget {
             icon: transaction.coins > 0
                 ? Icons.add_circle_outline
                 : Icons.remove_circle_outline,
-            subtitle: _TransactionAmount(transaction: transaction),
+            subtitle: _TransactionAmount(coins: transaction.coins),
             onTap: () => _open(
               context,
               _WalletPage(
@@ -156,7 +270,7 @@ class _History extends StatelessWidget {
                     title: transaction.title,
                     subtitle: transaction.status,
                   ),
-                  _TransactionAmount(transaction: transaction),
+                  _TransactionAmount(coins: transaction.coins),
                 ],
               ),
             ),
@@ -165,16 +279,112 @@ class _History extends StatelessWidget {
   );
 }
 
-class _TransactionAmount extends StatelessWidget {
-  const _TransactionAmount({required this.transaction});
+class _LiveHistory extends StatefulWidget {
+  const _LiveHistory({required this.reader});
 
-  final WalletTransaction transaction;
+  final WalletReader reader;
+
+  @override
+  State<_LiveHistory> createState() => _LiveHistoryState();
+}
+
+class _LiveHistoryState extends State<_LiveHistory> {
+  int _page = 1;
+  int _pageSize = 20;
+
+  void _goTo(int page, int pageSize) => setState(() {
+    _page = page;
+    _pageSize = pageSize;
+  });
+
+  @override
+  Widget build(BuildContext context) => _WalletPage(
+    title: 'Transaction History',
+    demo: false,
+    children: [
+      _WalletRead<WalletTransactionPage>(
+        key: ValueKey(_page),
+        label: 'transaction history',
+        read: () =>
+            widget.reader.readTransactions(page: _page, pageSize: _pageSize),
+        content: (result) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (result.items.isEmpty)
+              const WayhunterEmptyView(title: 'No transactions on this page'),
+            for (final entry in result.items) _liveTransaction(entry),
+            Text('Page ${result.page}'),
+            Wrap(
+              spacing: WayhunterLayout.medium,
+              children: [
+                TextButton(
+                  onPressed: result.page > 1
+                      ? () => _goTo(result.page - 1, result.pageSize)
+                      : null,
+                  child: const Text('Previous page'),
+                ),
+                TextButton(
+                  onPressed: result.page * result.pageSize < result.totalCount
+                      ? () => _goTo(result.page + 1, result.pageSize)
+                      : null,
+                  child: const Text('Next page'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
+
+  Widget _liveTransaction(LiveWalletTransaction entry) {
+    final kind = switch (entry.kind) {
+      WalletTransactionKind.reward => 'Reward',
+      WalletTransactionKind.hold => 'Hold',
+      WalletTransactionKind.debit => 'Debit',
+      WalletTransactionKind.release => 'Release',
+      WalletTransactionKind.correction => 'Correction',
+    };
+    return _WalletLink(
+      key: ValueKey((entry.id, entry.kind)),
+      title: kind,
+      icon: Icons.receipt_long_outlined,
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _TransactionAmount(coins: entry.coins),
+          Text(entry.status),
+        ],
+      ),
+      onTap: () => _open(
+        context,
+        _WalletPage(
+          title: 'Transaction details',
+          demo: false,
+          children: [
+            WayhunterHeader(title: kind, subtitle: entry.status),
+            _TransactionAmount(coins: entry.coins),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TransactionAmount extends StatelessWidget {
+  const _TransactionAmount({required this.coins});
+
+  final int coins;
 
   @override
   Widget build(BuildContext context) {
-    final positive = transaction.coins > 0;
+    final positive = coins > 0;
     return Text(
-      '${positive ? '+' : '−'}${formatCoins(transaction.coins.abs())} Coins',
+      '${positive
+          ? '+'
+          : coins < 0
+          ? '−'
+          : ''}${formatCoins(coins.abs())} Coins',
       style: Theme.of(context).textTheme.titleMedium?.copyWith(
         color: positive
             ? Theme.of(context).colorScheme.primary
@@ -208,6 +418,77 @@ class _Offers extends StatelessWidget {
           ),
     ],
   );
+}
+
+class _LiveOffers extends StatelessWidget {
+  const _LiveOffers({required this.reader});
+
+  final WalletReader reader;
+
+  @override
+  Widget build(BuildContext context) => _WalletPage(
+    title: 'Voucher Offers',
+    demo: false,
+    children: [
+      _WalletRead<List<LiveVoucherOffer>>(
+        label: 'voucher offers',
+        read: reader.readOffers,
+        content: (offers) => offers.isEmpty
+            ? const WayhunterEmptyView(
+                title: 'No voucher offers',
+                message: 'Available offers will appear here.',
+              )
+            : Column(
+                children: [
+                  for (final offer in offers)
+                    _WalletLink(
+                      key: ValueKey(offer.id),
+                      title: offer.code,
+                      icon: Icons.local_offer_outlined,
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('${formatCoins(offer.cost)} Coins'),
+                          Text(_offerStock(offer)),
+                          Text(_offerEligibility(offer)),
+                        ],
+                      ),
+                      onTap: () => _open(
+                        context,
+                        _WalletPage(
+                          title: 'Offer details',
+                          demo: false,
+                          children: [
+                            WayhunterHeader(title: offer.code),
+                            Text(
+                              'Redemption cost · ${formatCoins(offer.cost)} Coins',
+                            ),
+                            Text(
+                              'Reference value · LKR ${offer.referenceValueLkr.toStringAsFixed(2)}',
+                            ),
+                            Text(
+                              'Valid until · ${MaterialLocalizations.of(context).formatMediumDate(offer.validUntil.toLocal())} '
+                              '${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(offer.validUntil.toLocal()))}',
+                            ),
+                            Text(_offerStock(offer)),
+                            Text(_offerEligibility(offer)),
+                            const Text('Voucher redemption unavailable'),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+      ),
+    ],
+  );
+
+  String _offerStock(LiveVoucherOffer offer) => offer.availableStock == 0
+      ? 'Out of stock'
+      : 'Available stock · ${offer.availableStock}';
+
+  String _offerEligibility(LiveVoucherOffer offer) =>
+      offer.isEligible ? 'Eligible' : 'Not eligible';
 }
 
 class _OfferDetails extends StatelessWidget {
@@ -357,7 +638,30 @@ class _RedemptionDetailsState extends State<_RedemptionDetails> {
 }
 
 void _open(BuildContext context, Widget page) {
-  Navigator.of(context).push<void>(MaterialPageRoute(builder: (_) => page));
+  final session = context
+      .getInheritedWidgetOfExactType<FoundationServices>()
+      ?.session;
+  final openingState = session?.state;
+  Navigator.of(context).push<void>(
+    MaterialPageRoute(
+      builder: (_) => session == null
+          ? page
+          : ListenableBuilder(
+              listenable: session,
+              builder: (context, _) => identical(session.state, openingState)
+                  ? page
+                  : const _WalletPage(
+                      title: 'Wallet',
+                      demo: false,
+                      children: [
+                        WayhunterUnavailableView(
+                          title: 'Wallet session changed',
+                        ),
+                      ],
+                    ),
+            ),
+    ),
+  );
 }
 
 class _WalletPage extends StatelessWidget {
@@ -375,28 +679,29 @@ class _WalletPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final body = ListView(
-      padding: const EdgeInsets.all(WayhunterLayout.pagePadding),
+    final body = Person2Content(
+      spacing: WayhunterLayout.medium,
       children: [
-        if (embedded) WayhunterHeader(title: title),
-        if (demo) const Text('DEMO · Sample data'),
-        for (final child in children)
-          Padding(
-            padding: const EdgeInsets.only(bottom: WayhunterLayout.medium),
-            child: child,
+        WayhunterHeader(title: title),
+        if (demo)
+          const Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: WayhunterStatusIndicator(
+              label: 'DEMO · Sample data',
+              tone: WayhunterStatusTone.warning,
+            ),
           ),
+        ...children,
       ],
     );
     if (embedded) return body;
-    return WayhunterPageScaffold(
-      appBar: AppBar(title: Text(title)),
-      body: body,
-    );
+    return WayhunterPageScaffold(appBar: AppBar(), body: body);
   }
 }
 
 class _WalletLink extends StatelessWidget {
   const _WalletLink({
+    super.key,
     required this.title,
     required this.icon,
     required this.onTap,
@@ -409,7 +714,8 @@ class _WalletLink extends StatelessWidget {
   final Widget? subtitle;
 
   @override
-  Widget build(BuildContext context) => Card(
+  Widget build(BuildContext context) => WayhunterSurfaceCard(
+    padding: EdgeInsets.zero,
     child: ListTile(
       leading: Icon(icon),
       title: Text(title),

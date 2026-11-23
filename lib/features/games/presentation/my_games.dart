@@ -60,11 +60,11 @@ class _MyGamesScreenState extends State<MyGamesScreen> {
           label: 'Development demo data',
           tone: WayhunterStatusTone.info,
         ),
-        for (final game in _examples) _GameHistoryCard(game: game, demo: true),
         WayhunterButton.secondary(
           label: 'Return to My Games',
           onPressed: () => setState(() => _showDemo = false),
         ),
+        for (final game in _examples) _GameHistoryCard(game: game, demo: true),
       ] else if (widget.loadHistory case final load?)
         FutureBuilder<List<CreatedGameSummary>>(
           future: _history ??= Future.sync(load),
