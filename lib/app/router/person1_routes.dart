@@ -2,10 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:wayhunter_mobile/app/bootstrap/foundation_services.dart';
 import 'package:wayhunter_mobile/app/router/app_routes.dart';
 import 'package:wayhunter_mobile/app/router/route_registration.dart';
+import 'package:wayhunter_mobile/core/widgets/wayhunter_states.dart';
 import 'package:wayhunter_mobile/features/auth/data/identity_api.dart';
 import 'package:wayhunter_mobile/features/auth/presentation/auth_flow.dart';
 import 'package:wayhunter_mobile/features/auth/presentation/auth_gate.dart';
 import 'package:wayhunter_mobile/features/home/presentation/views/home_screen.dart';
+import 'package:wayhunter_mobile/features/traveller/planning/data/trip_plans_api.dart';
+import 'package:wayhunter_mobile/features/traveller/planning/domain/trip_plan.dart';
+import 'package:wayhunter_mobile/features/traveller/planning/presentation/traveller_screens.dart';
+import 'package:wayhunter_mobile/features/traveller/planning/presentation/trip_editor.dart';
 import 'package:wayhunter_mobile/shared/domain/models/navigation_refs.dart';
 import 'package:wayhunter_mobile/shared/widgets/starter_placeholder.dart';
 
@@ -21,7 +26,13 @@ Map<String, RouteRegistration<Object?>> person1Routes(
   AppRoutes.home: RouteRegistration<Null>(
     (_, arguments) => HomeScreen(onSelectModule: selectModule),
   ),
-  AppRoutes.traveller: const RouteRegistration<Null>(_traveller),
+  AppRoutes.traveller: RouteRegistration<Null>((_, _) => const TravellerHome()),
+  createTripRoute: RouteRegistration<Null>(
+    (context, _) => _planning(context, (api) => TripEditor(api: api)),
+  ),
+  myTripPlansRoute: RouteRegistration<Null>(
+    (context, _) => _planning(context, (api) => MyTripPlans(api: api)),
+  ),
   AppRoutes.profile: const RouteRegistration<Null>(_profile),
   AppRoutes.userProfile: RouteRegistration<UserRef>(
     (_, arguments) =>
@@ -41,8 +52,11 @@ Map<String, RouteRegistration<Object?>> person1Routes(
     validate: (place) => isNavigationId(place.id),
   ),
   AppRoutes.tripPlan: RouteRegistration<TripPlanRef>(
-    (_, arguments) => const StarterPlaceholder(title: 'Trip plan', owner: 'M2'),
-    validate: (plan) => isNavigationId(plan.id),
+    (context, plan) => _planning(
+      context,
+      (api) => SavedTripDetails(api: api, reference: plan),
+    ),
+    validate: (plan) => isTripPlanId(plan.id),
   ),
   AppRoutes.activeTrip: RouteRegistration<ActiveTripArgs>(
     (_, arguments) =>
@@ -52,8 +66,12 @@ Map<String, RouteRegistration<Object?>> person1Routes(
   ),
 };
 
-Widget _traveller(BuildContext context, Null arguments) =>
-    const StarterPlaceholder(title: 'Traveler', owner: 'M2 / M3');
+Widget _planning(BuildContext context, Widget Function(TripPlansApi) builder) {
+  final services = context
+      .dependOnInheritedWidgetOfExactType<FoundationServices>();
+  if (services == null) return const WayhunterUnavailableView();
+  return builder(TripPlansApi(services.api, services.session));
+}
 
 Widget _profile(BuildContext context, Null arguments) => SafeArea(
   child: ListView(
