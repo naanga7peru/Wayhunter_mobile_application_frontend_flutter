@@ -1,12 +1,14 @@
-
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:wayhunter_mobile/core/network/api_client.dart';
+import 'package:wayhunter_mobile/features/auth/presentation/auth_form.dart';
 
 enum OtpVerificationResult {
   verified,
   wrongCode,
+  invalidOrExpired,
   expired,
   networkError,
 }
@@ -17,15 +19,15 @@ class OtpVerificationScreen extends StatefulWidget {
     required this.email,
     this.onVerify,
     this.onResend,
+    this.onVerified,
     this.initialCooldownSeconds = 0,
     this.resendCooldownSeconds = 60,
   });
 
   final String email;
 
-  // Backend callbacks will be connected later.
-  final Future<OtpVerificationResult> Function(String code)?
-      onVerify;
+  final VoidCallback? onVerified;
+  final Future<OtpVerificationResult> Function(String code)? onVerify;
 
   final Future<bool> Function()? onResend;
 
@@ -33,12 +35,10 @@ class OtpVerificationScreen extends StatefulWidget {
   final int resendCooldownSeconds;
 
   @override
-  State<OtpVerificationScreen> createState() =>
-      _OtpVerificationScreenState();
+  State<OtpVerificationScreen> createState() => _OtpVerificationScreenState();
 }
 
-class _OtpVerificationScreenState
-    extends State<OtpVerificationScreen> {
+class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   final _otpController = TextEditingController();
 
   Timer? _countdownTimer;
@@ -65,25 +65,22 @@ class _OtpVerificationScreenState
 
     if (seconds <= 0) return;
 
-    _countdownTimer = Timer.periodic(
-      const Duration(seconds: 1),
-      (timer) {
-        if (!mounted) {
-          timer.cancel();
-          return;
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+
+      setState(() {
+        if (_secondsRemaining > 0) {
+          _secondsRemaining--;
         }
 
-        setState(() {
-          if (_secondsRemaining > 0) {
-            _secondsRemaining--;
-          }
-
-          if (_secondsRemaining == 0) {
-            timer.cancel();
-          }
-        });
-      },
-    );
+        if (_secondsRemaining == 0) {
+          timer.cancel();
+        }
+      });
+    });
   }
 
   Future<void> _verifyOtp() async {
@@ -120,25 +117,23 @@ class _OtpVerificationScreenState
       if (!mounted) return;
 
       setState(() {
-        _isError =
-            result != OtpVerificationResult.verified;
+        _isError = result != OtpVerificationResult.verified;
 
         _message = switch (result) {
-          OtpVerificationResult.verified =>
-            'Email verified successfully',
-          OtpVerificationResult.wrongCode =>
-            'Incorrect OTP. Please try again.',
-          OtpVerificationResult.expired =>
-            'OTP expired. Request a new code.',
-          OtpVerificationResult.networkError =>
-            'Network error. Please retry.',
+          OtpVerificationResult.verified => 'Email verified successfully',
+          OtpVerificationResult.wrongCode => 'Incorrect OTP. Please try again.',
+          OtpVerificationResult.invalidOrExpired =>
+            'Incorrect or expired OTP. Try again or request a new code.',
+          OtpVerificationResult.expired => 'OTP expired. Request a new code.',
+          OtpVerificationResult.networkError => 'Network error. Please retry.',
         };
       });
-    } catch (_) {
+      if (result == OtpVerificationResult.verified) widget.onVerified?.call();
+    } catch (error) {
       if (!mounted) return;
 
       setState(() {
-        _message = 'Network error. Please retry.';
+        _message = authErrorMessage(error);
         _isError = true;
       });
     } finally {
@@ -151,9 +146,7 @@ class _OtpVerificationScreenState
   }
 
   Future<void> _resendOtp() async {
-    if (_secondsRemaining > 0 ||
-        _isResending ||
-        _isVerifying) {
+    if (_secondsRemaining > 0 || _isResending || _isVerifying) {
       return;
     }
 
@@ -180,9 +173,7 @@ class _OtpVerificationScreenState
       if (success) {
         _otpController.clear();
 
-        _beginCountdown(
-          widget.resendCooldownSeconds,
-        );
+        _beginCountdown(widget.resendCooldownSeconds);
       }
 
       setState(() {
@@ -191,11 +182,14 @@ class _OtpVerificationScreenState
             ? 'A new OTP has been requested'
             : 'Could not resend OTP. Please retry.';
       });
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
 
       setState(() {
-        _message = 'Network error. Please retry.';
+        if (error is ApiException && error.statusCode == 429) {
+          _beginCountdown(widget.resendCooldownSeconds);
+        }
+        _message = authErrorMessage(error);
         _isError = true;
       });
     } finally {
@@ -220,20 +214,15 @@ class _OtpVerificationScreenState
 
     return Scaffold(
       backgroundColor: const Color(0xFF0A1420),
-      appBar: AppBar(
-        title: const Text('Verify Email'),
-      ),
+      appBar: AppBar(title: const Text('Verify Email')),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(
-                maxWidth: 440,
-              ),
+              constraints: const BoxConstraints(maxWidth: 440),
               child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.stretch,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const Icon(
                     Icons.mark_email_read_outlined,
@@ -244,10 +233,7 @@ class _OtpVerificationScreenState
                   const Text(
                     'OTP Verification',
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),
                   Text(
@@ -261,9 +247,7 @@ class _OtpVerificationScreenState
                     keyboardType: TextInputType.number,
                     textAlign: TextAlign.center,
                     maxLength: 6,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                    ],
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     decoration: const InputDecoration(
                       labelText: '6-digit OTP',
                       hintText: '000000',
@@ -276,11 +260,7 @@ class _OtpVerificationScreenState
                     onPressed: busy ? null : _verifyOtp,
                     child: Padding(
                       padding: const EdgeInsets.all(14),
-                      child: Text(
-                        _isVerifying
-                            ? 'Verifying...'
-                            : 'Verify OTP',
-                      ),
+                      child: Text(_isVerifying ? 'Verifying...' : 'Verify OTP'),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -293,11 +273,7 @@ class _OtpVerificationScreenState
                   else
                     TextButton(
                       onPressed: busy ? null : _resendOtp,
-                      child: Text(
-                        _isResending
-                            ? 'Resending...'
-                            : 'Resend OTP',
-                      ),
+                      child: Text(_isResending ? 'Resending...' : 'Resend OTP'),
                     ),
                   if (_message != null) ...[
                     const SizedBox(height: 20),
@@ -305,9 +281,7 @@ class _OtpVerificationScreenState
                       _message!,
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: _isError
-                            ? Colors.redAccent
-                            : Colors.greenAccent,
+                        color: _isError ? Colors.redAccent : Colors.greenAccent,
                       ),
                     ),
                   ],

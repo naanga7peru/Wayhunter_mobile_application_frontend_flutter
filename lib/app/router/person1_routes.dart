@@ -1,13 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:wayhunter_mobile/app/bootstrap/foundation_services.dart';
 import 'package:wayhunter_mobile/app/router/app_routes.dart';
 import 'package:wayhunter_mobile/app/router/route_registration.dart';
+import 'package:wayhunter_mobile/features/auth/data/identity_api.dart';
+import 'package:wayhunter_mobile/features/auth/presentation/auth_flow.dart';
+import 'package:wayhunter_mobile/features/auth/presentation/auth_gate.dart';
 import 'package:wayhunter_mobile/features/home/presentation/views/home_screen.dart';
 import 'package:wayhunter_mobile/shared/domain/models/navigation_refs.dart';
 import 'package:wayhunter_mobile/shared/widgets/starter_placeholder.dart';
 
+const person1AuthRoute = 'auth.signIn';
+
 Map<String, RouteRegistration<Object?>> person1Routes(
   ValueChanged<ModuleId> selectModule,
 ) => {
+  person1AuthRoute: RouteRegistration<Null>((context, _) {
+    final services = FoundationServices.of(context);
+    return AuthFlow(api: IdentityApi(services.api), session: services.session);
+  }),
   AppRoutes.home: RouteRegistration<Null>(
     (_, arguments) => HomeScreen(onSelectModule: selectModule),
   ),
@@ -63,6 +73,7 @@ Widget _profile(BuildContext context, Null arguments) => SafeArea(
         title: const Text('My Games'),
         onTap: () => const AppDestination(AppRoutes.myGames).open(context),
       ),
+      const AuthSignOutTile(),
     ],
   ),
 );

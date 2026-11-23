@@ -73,7 +73,10 @@ class _FoundationRootState extends State<_FoundationRoot> {
   Widget build(BuildContext context) => FoundationServices(
     api: _api,
     session: _session,
-    child: WayhunterApp(environmentLabel: widget.config.environmentLabel),
+    child: WayhunterApp.authenticated(
+      environmentLabel: widget.config.environmentLabel,
+      apiConfigured: widget.config.apiBaseUrl != null,
+    ),
   );
 
   @override
