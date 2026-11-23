@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:wayhunter_mobile/app/bootstrap/foundation_services.dart';
 import 'package:wayhunter_mobile/app/router/app_routes.dart';
+import 'package:wayhunter_mobile/core/services/device_interfaces.dart';
 import 'package:wayhunter_mobile/core/theme/wayhunter_tokens.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_controls.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_page.dart';
@@ -7,6 +9,7 @@ import 'package:wayhunter_mobile/core/widgets/wayhunter_states.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_surface.dart';
 import 'package:wayhunter_mobile/features/hunter/domain/hunter_history.dart';
 import 'package:wayhunter_mobile/shared/domain/models/navigation_refs.dart';
+import 'package:wayhunter_mobile/shared/presentation/person2_content.dart';
 
 const hunterAddNewPlaceRoute = 'hunter.addNewPlace';
 
@@ -14,28 +17,32 @@ class HunterHomeScreen extends StatelessWidget {
   const HunterHomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => _HunterContent(
+  Widget build(BuildContext context) => Person2Content(
     children: [
       WayhunterSurfaceCard(
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: WayhunterLayout.medium,
           children: [
-            Icon(
-              Icons.explore_outlined,
-              color: WayhunterColors.moduleInk(ModuleId.hunter),
-              size: 36,
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: Icon(
+                Icons.explore_outlined,
+                color: WayhunterColors.moduleInk(ModuleId.hunter),
+                size: 36,
+              ),
             ),
-            const SizedBox(height: WayhunterLayout.medium),
             const WayhunterHeader(
               title: 'Location Hunter',
               subtitle:
                   'Suggest a place and follow its verification in My Hunts.',
             ),
-            const SizedBox(height: WayhunterLayout.large),
-            const WayhunterStatusIndicator(
-              label: 'Current district unavailable',
+            const Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: WayhunterStatusIndicator(
+                label: 'Current district unavailable',
+              ),
             ),
-            const SizedBox(height: WayhunterLayout.medium),
             WayhunterButton.primary(
               label: 'Add New Place',
               onPressed: () =>
@@ -45,6 +52,12 @@ class HunterHomeScreen extends StatelessWidget {
               label: 'My Hunts',
               onPressed: () =>
                   const AppDestination(AppRoutes.myHunts).open(context),
+            ),
+            WayhunterButton.secondary(
+              label: 'Hunter Leaderboard',
+              onPressed: () => const AppDestination.leaderboard(
+                ModuleId.hunter,
+              ).open(context),
             ),
           ],
         ),
@@ -78,13 +91,13 @@ class _AddNewPlaceScreenState extends State<AddNewPlaceScreen> {
   }
 
   void _review() {
-    if (!_form.currentState!.validate()) return;
+    if (!validatePerson2Draft(_form.currentState!)) return;
     FocusScope.of(context).unfocus();
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => WayhunterPageScaffold(
           appBar: AppBar(),
-          body: _HunterContent(
+          body: Person2Content(
             children: [
               const WayhunterHeader(
                 title: 'Review place details',
@@ -118,26 +131,31 @@ class _AddNewPlaceScreenState extends State<AddNewPlaceScreen> {
   @override
   Widget build(BuildContext context) => Form(
     key: _form,
-    child: _HunterContent(
+    child: Person2Content(
       children: [
         const WayhunterHeader(
           title: 'Add New Place',
           subtitle: 'Enter the place details before adding live evidence.',
         ),
-        WayhunterTextField(
+        Person2DraftField(
           label: 'Place name',
+          hint: 'Enter the name visitors would look for',
           controller: _name,
           validator: (value) =>
               (value ?? '').trim().isEmpty ? 'Enter a place name.' : null,
         ),
-        WayhunterTextField(
+        Person2DraftField(
           label: 'Description',
+          hint: 'Describe what visitors will find there',
+          maxLines: 5,
+          textInputAction: TextInputAction.newline,
           controller: _description,
           keyboardType: TextInputType.multiline,
           validator: (value) =>
               (value ?? '').trim().isEmpty ? 'Enter a description.' : null,
         ),
         const _EvidenceRequirements(),
+        const _HunterDeviceChecks(),
         WayhunterButton.primary(
           label: 'Review place details',
           onPressed: _review,
@@ -186,7 +204,12 @@ class _MyHuntsScreenState extends State<MyHuntsScreen> {
   @override
   void didUpdateWidget(MyHuntsScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!_demo && oldWidget.history != widget.history) {
+    if (_demo && widget.demoHistory == null) {
+      _demo = false;
+      _hunts = null;
+    } else if (_demo
+        ? oldWidget.demoHistory != widget.demoHistory
+        : oldWidget.history != widget.history) {
       _hunts = null;
     }
   }
@@ -197,7 +220,7 @@ class _MyHuntsScreenState extends State<MyHuntsScreen> {
   });
 
   @override
-  Widget build(BuildContext context) => _HunterContent(
+  Widget build(BuildContext context) => Person2Content(
     children: [
       const WayhunterHeader(
         title: 'My Hunts',
@@ -218,7 +241,9 @@ class _MyHuntsScreenState extends State<MyHuntsScreen> {
             .load(),
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
-            return const WayhunterLoadingView(label: 'Loading hunts');
+            return WayhunterLoadingView(
+              label: _demo ? 'Loading DEMO hunts' : 'Loading hunts',
+            );
           }
           if (snapshot.error is HunterHistoryUnavailable) {
             return WayhunterUnavailableView(
@@ -276,7 +301,7 @@ class _MyHuntsScreenState extends State<MyHuntsScreen> {
       MaterialPageRoute<void>(
         builder: (_) => WayhunterPageScaffold(
           appBar: AppBar(),
-          body: _HunterContent(
+          body: Person2Content(
             children: [
               const WayhunterHeader(title: 'Hunt details'),
               if (demo)
@@ -328,27 +353,98 @@ class _HuntStatusIndicator extends StatelessWidget {
   }
 }
 
-class _HunterContent extends StatelessWidget {
-  const _HunterContent({required this.children});
-
-  final List<Widget> children;
+class _HunterDeviceChecks extends StatefulWidget {
+  const _HunterDeviceChecks();
 
   @override
-  Widget build(BuildContext context) => SafeArea(
-    child: SingleChildScrollView(
-      padding: const EdgeInsets.all(WayhunterLayout.pagePadding),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(
-            maxWidth: WayhunterLayout.contentWidth,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            spacing: WayhunterLayout.large,
-            children: children,
+  State<_HunterDeviceChecks> createState() => _HunterDeviceChecksState();
+}
+
+class _HunterDeviceChecksState extends State<_HunterDeviceChecks> {
+  bool _busy = false;
+  String? _message;
+
+  Future<void> _capture({
+    required DevicePermission permission,
+    required String label,
+    required Future<Object> Function(FoundationServices) read,
+  }) async {
+    final services = context
+        .getInheritedWidgetOfExactType<FoundationServices>();
+    if (services == null) {
+      setState(() => _message = '$label is unavailable on this device.');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    try {
+      var access = await services.permissions.check(permission);
+      if (!mounted) return;
+      if (access == DevicePermissionStatus.denied) {
+        access = await services.permissions.request(permission);
+      }
+      if (!mounted) return;
+      if (access != DevicePermissionStatus.granted) {
+        _message = switch (access) {
+          DevicePermissionStatus.denied => '$label permission denied.',
+          DevicePermissionStatus.permanentlyDenied =>
+            '$label permission blocked. Check device settings.',
+          _ => '$label is unavailable on this device.',
+        };
+        return;
+      }
+      await read(services);
+      _message = '$label captured. Verification and upload are unavailable.';
+    } catch (_) {
+      _message = 'Could not capture $label. Try again.';
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    spacing: WayhunterLayout.small,
+    children: [
+      const Text(
+        'District validation, nearby duplicate review and restricted-place checks are unavailable.',
+      ),
+      const Text(
+        'For guided 360° evidence, record one slow full turn from a safe position.',
+      ),
+      if (_message case final message?)
+        Semantics(liveRegion: true, child: Text(message)),
+      if (_busy)
+        const WayhunterLoadingView(label: 'Waiting for device')
+      else ...[
+        WayhunterButton.secondary(
+          label: 'Get current location',
+          onPressed: () => _capture(
+            permission: DevicePermission.location,
+            label: 'GPS location',
+            read: (services) => services.location.read(),
           ),
         ),
-      ),
-    ),
+        WayhunterButton.secondary(
+          label: 'Record guided 360° video',
+          onPressed: () => _capture(
+            permission: DevicePermission.camera,
+            label: 'Live video',
+            read: (services) => services.capture.recordVideo(),
+          ),
+        ),
+        WayhunterButton.secondary(
+          label: 'Take live photo',
+          onPressed: () => _capture(
+            permission: DevicePermission.camera,
+            label: 'Live photo',
+            read: (services) => services.capture.takePhoto(),
+          ),
+        ),
+      ],
+    ],
   );
 }

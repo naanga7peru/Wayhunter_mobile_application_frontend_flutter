@@ -13,6 +13,8 @@ import 'package:wayhunter_mobile/features/notifications/data/notifications_api.d
 import 'package:wayhunter_mobile/features/notifications/domain/notification_models.dart';
 import 'package:wayhunter_mobile/shared/domain/models/navigation_refs.dart';
 
+import 'wallet_balance_fixture.dart';
+
 const _base = '/api/mobile/notifications';
 const _owner = '30000000-0000-0000-0000-000000000001';
 const _other = '30000000-0000-0000-0000-000000000002';
@@ -87,6 +89,7 @@ class _Harness {
           'email': 'fixture@example.invalid',
         }),
         '/api/mobile/advertisements/active' => _json([]),
+        walletBalancePath => walletBalanceResponse(),
         '/api/mobile/auth/logout' => const TransportResponse(204, []),
         '/api/mobile/identity/login' => _json({
           'userId': _other,
@@ -260,7 +263,7 @@ void main() {
       await h.open(tester);
       await _tap(tester, 'Profile');
       await _tap(tester, 'Wallet');
-      expect(find.text('Wallet balance unavailable'), findsOneWidget);
+      expect(find.text('$fixtureSpendableCoins'), findsOneWidget);
       await tester.pageBack();
       await tester.pumpAndSettle();
       await _tap(tester, 'Notifications');

@@ -5,6 +5,7 @@ import 'package:wayhunter_mobile/core/widgets/wayhunter_page.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_states.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_surface.dart';
 import 'package:wayhunter_mobile/features/games/presentation/game_navigation.dart';
+import 'package:wayhunter_mobile/shared/presentation/person2_content.dart';
 
 class _GameDraft {
   String title = '';
@@ -30,7 +31,7 @@ class _CreateGameScreenState extends State<CreateGameScreen> {
   final _draft = _GameDraft();
 
   void _openStages() {
-    if (!_form.currentState!.validate()) return;
+    if (!validatePerson2Draft(_form.currentState!)) return;
     FocusScope.of(context).unfocus();
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(builder: (_) => _StagesScreen(draft: _draft)),
@@ -46,24 +47,31 @@ class _CreateGameScreenState extends State<CreateGameScreen> {
           title: 'Create Game',
           subtitle: 'This draft is kept while the creation flow is open.',
         ),
-        WayhunterTextField(
+        Person2DraftField(
           label: 'Game title',
+          hint: 'Give players a short, memorable title',
           onChanged: (value) => _draft.title = value.trim(),
           validator: (value) => _required(value, 'Enter a game title.'),
         ),
-        WayhunterTextField(
+        Person2DraftField(
           label: 'Description',
+          hint: 'Describe the challenge players will explore',
+          maxLines: 5,
+          textInputAction: TextInputAction.newline,
           keyboardType: TextInputType.multiline,
           onChanged: (value) => _draft.description = value.trim(),
           validator: (value) => _required(value, 'Enter a description.'),
         ),
-        WayhunterTextField(
+        Person2DraftField(
           label: 'District',
+          hint: 'Enter the district where players will look',
           onChanged: (value) => _draft.district = value.trim(),
           validator: (value) => _required(value, 'Enter a district.'),
         ),
-        WayhunterTextField(
+        Person2DraftField(
           label: 'Play duration (minutes)',
+          hint: 'For example, 30',
+          textInputAction: TextInputAction.done,
           keyboardType: TextInputType.number,
           onChanged: (value) => _draft.durationMinutes = value.trim(),
           validator: (value) {
@@ -107,7 +115,7 @@ class _StagesScreenState extends State<_StagesScreen> {
   }
 
   void _review() {
-    if (!_form.currentState!.validate()) return;
+    if (!validatePerson2Draft(_form.currentState!)) return;
     FocusScope.of(context).unfocus();
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
@@ -123,7 +131,11 @@ class _StagesScreenState extends State<_StagesScreen> {
       key: _form,
       child: GameContent(
         children: [
-          const WayhunterHeader(title: 'Stages and Hints'),
+          const WayhunterHeader(
+            title: 'Stages and Hints',
+            subtitle:
+                'Add a clue for each stage in the order players will see it.',
+          ),
           for (var index = 0; index < _stages.length; index++)
             _StageEditor(
               key: ObjectKey(_stages[index]),
@@ -209,8 +221,11 @@ class _StageEditorState extends State<_StageEditor> {
             ),
           ],
         ),
-        WayhunterTextField(
+        Person2DraftField(
           label: 'Stage ${widget.number} hint',
+          hint: 'Give players a clue for this stage',
+          maxLines: 4,
+          textInputAction: TextInputAction.newline,
           controller: _hint,
           keyboardType: TextInputType.multiline,
           onChanged: (value) => widget.stage.hint = value,
@@ -232,7 +247,10 @@ class _ReviewGameScreen extends StatelessWidget {
     appBar: AppBar(),
     body: GameContent(
       children: [
-        const WayhunterHeader(title: 'Review Game'),
+        const WayhunterHeader(
+          title: 'Review Game',
+          subtitle: 'Check the game details and clue order.',
+        ),
         WayhunterSurfaceCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

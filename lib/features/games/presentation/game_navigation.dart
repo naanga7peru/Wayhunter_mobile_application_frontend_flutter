@@ -5,9 +5,12 @@ import 'package:wayhunter_mobile/core/widgets/wayhunter_controls.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_page.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_surface.dart';
 import 'package:wayhunter_mobile/shared/domain/models/navigation_refs.dart';
+import 'package:wayhunter_mobile/shared/presentation/person2_content.dart';
 
 const createGameRoute = 'games.create';
 const playGameRoute = 'games.play';
+const gameDetailsRoute = 'games.details';
+const myGameAttemptsRoute = 'games.myAttempts';
 
 class GameZoneScreen extends StatelessWidget {
   const GameZoneScreen({super.key});
@@ -25,7 +28,11 @@ class GameZoneScreen extends StatelessWidget {
               color: WayhunterColors.moduleInk(ModuleId.game),
               size: 36,
             ),
-            const WayhunterHeader(title: 'Game Zone'),
+            const WayhunterHeader(
+              title: 'Game Zone',
+              subtitle:
+                  'Discover games, build your own, or revisit your history.',
+            ),
             WayhunterButton.primary(
               label: 'Create Game',
               onPressed: () =>
@@ -37,9 +44,19 @@ class GameZoneScreen extends StatelessWidget {
                   const AppDestination(playGameRoute).open(context),
             ),
             WayhunterButton.secondary(
+              label: 'My Game Attempts',
+              onPressed: () =>
+                  const AppDestination(myGameAttemptsRoute).open(context),
+            ),
+            WayhunterButton.secondary(
               label: 'My Games',
               onPressed: () =>
                   const AppDestination(AppRoutes.myGames).open(context),
+            ),
+            WayhunterButton.secondary(
+              label: 'Game Leaderboard',
+              onPressed: () =>
+                  const AppDestination.leaderboard(ModuleId.game).open(context),
             ),
           ],
         ),
@@ -54,21 +71,5 @@ class GameContent extends StatelessWidget {
   final List<Widget> children;
 
   @override
-  Widget build(BuildContext context) => SafeArea(
-    child: SingleChildScrollView(
-      padding: const EdgeInsets.all(WayhunterLayout.pagePadding),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(
-            maxWidth: WayhunterLayout.contentWidth,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            spacing: WayhunterLayout.large,
-            children: children,
-          ),
-        ),
-      ),
-    ),
-  );
+  Widget build(BuildContext context) => Person2Content(children: children);
 }

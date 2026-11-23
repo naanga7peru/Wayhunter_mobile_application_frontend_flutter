@@ -11,6 +11,8 @@ import 'package:wayhunter_mobile/core/storage/credential_store.dart';
 import 'package:wayhunter_mobile/features/settings/presentation/settings_screen.dart';
 import 'package:wayhunter_mobile/shared/domain/models/navigation_refs.dart';
 
+import 'wallet_balance_fixture.dart';
+
 const _owner = '50000000-0000-0000-0000-000000000001';
 const _other = '50000000-0000-0000-0000-000000000002';
 const _preferences = '/api/mobile/notifications/preferences';
@@ -69,6 +71,7 @@ class _Transport implements HttpTransport {
         'email': 'visitor@example.invalid',
       }),
       '/api/mobile/advertisements/active' => _json([]),
+      walletBalancePath => walletBalanceResponse(),
       '/api/mobile/auth/logout' => TransportResponse(
         failRemoteLogout ? 503 : 204,
         const [],
@@ -145,7 +148,7 @@ void main() {
     await h.open(tester);
     await _tap(tester, 'Profile');
     await _tap(tester, 'Wallet');
-    expect(find.text('Wallet balance unavailable'), findsOneWidget);
+    expect(find.text('$fixtureSpendableCoins'), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
     await _tap(tester, 'Settings');

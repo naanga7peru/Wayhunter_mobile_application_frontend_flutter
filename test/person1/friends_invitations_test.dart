@@ -14,6 +14,8 @@ import 'package:wayhunter_mobile/features/friends/data/trip_invitations_api.dart
 import 'package:wayhunter_mobile/features/friends/domain/trip_invitation.dart';
 import 'package:wayhunter_mobile/shared/domain/models/navigation_refs.dart';
 
+import 'wallet_balance_fixture.dart';
+
 const _owner = '40000000-0000-0000-0000-000000000001';
 const _other = '40000000-0000-0000-0000-000000000002';
 const _plan = '40000000-0000-0000-0000-000000000003';
@@ -84,6 +86,7 @@ class _Harness {
           'email': 'visitor@example.invalid',
         }),
         '/api/mobile/advertisements/active' => _json([]),
+        walletBalancePath => walletBalanceResponse(),
         '/api/mobile/auth/logout' => const TransportResponse(204, []),
         '/api/mobile/identity/login' => _json({
           'userId': _other,
@@ -153,7 +156,7 @@ void main() {
       await h.open(tester);
       await _profile(tester);
       await _tap(tester, 'Wallet');
-      expect(find.text('Wallet balance unavailable'), findsOneWidget);
+      expect(find.text('$fixtureSpendableCoins'), findsOneWidget);
       await tester.pageBack();
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Friends'));

@@ -12,6 +12,8 @@ import 'package:wayhunter_mobile/core/storage/credential_store.dart';
 import 'package:wayhunter_mobile/features/auth/presentation/views/sign_in_screen.dart';
 import 'package:wayhunter_mobile/shared/domain/models/navigation_refs.dart';
 
+import 'wallet_balance_fixture.dart';
+
 const _first = '2d9a7616-35c2-4ebf-a840-d7c69f5ad114';
 const _second = 'dcae920f-4b98-43ab-9778-6aab01ae602f';
 const _savedToken = 'synthetic-saved-token';
@@ -155,7 +157,14 @@ void main() {
   ) async {
     final harness = _Harness(saved: true);
     final verification = Completer<TransportResponse>();
-    harness.transport.respond = (_) => verification.future;
+    harness.transport.respond = (request) {
+      if (request.uri.path == walletBalancePath) {
+        expect(request.method, ApiMethod.get);
+        expect(request.headers['Authorization'], 'Bearer $_savedToken');
+        return walletBalanceResponse();
+      }
+      return verification.future;
+    };
     await tester.pumpWidget(harness.app());
     await tester.pump();
     final request = harness.transport.requests.single;
@@ -169,7 +178,7 @@ void main() {
     expect(_shell, findsOneWidget);
     await _tap(tester, 'Profile');
     await _tap(tester, 'Wallet');
-    expect(find.text('Wallet balance unavailable'), findsOneWidget);
+    expect(find.text('$fixtureSpendableCoins'), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
     await _tap(tester, 'My Hunts');

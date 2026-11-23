@@ -14,6 +14,8 @@ import 'package:wayhunter_mobile/features/advertisements/presentation/home_banne
 import 'package:wayhunter_mobile/features/profile/data/my_profile_api.dart';
 import 'package:wayhunter_mobile/shared/domain/models/navigation_refs.dart';
 
+import 'wallet_balance_fixture.dart';
+
 const _owner = '20000000-0000-0000-0000-000000000001';
 const _other = '20000000-0000-0000-0000-000000000002';
 const _ads = '/api/mobile/advertisements/active';
@@ -109,6 +111,7 @@ class _Harness {
       return switch (request.uri.path) {
         _me => profile?.call() ?? _json(_profile(other)),
         _ads => ads?.call(other) ?? _json([]),
+        walletBalancePath => walletBalanceResponse(),
         '/api/mobile/notifications' => _json({'items': [], 'unreadCount': 0}),
         '/api/mobile/auth/logout' => const TransportResponse(204, []),
         '/api/mobile/identity/login' => _json({
@@ -170,7 +173,7 @@ void main() {
       expect(find.text('Never render this extra field'), findsNothing);
       expect(find.byType(Image), findsNothing);
       for (final (label, state) in [
-        ('Wallet', 'Wallet balance unavailable'),
+        ('Wallet', '$fixtureSpendableCoins'),
         ('My Hunts', 'Hunt history unavailable'),
         ('My Games', 'Game history unavailable'),
       ]) {
