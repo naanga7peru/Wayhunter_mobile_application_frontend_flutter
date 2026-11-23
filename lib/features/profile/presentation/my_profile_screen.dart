@@ -5,10 +5,9 @@ import 'package:wayhunter_mobile/core/widgets/wayhunter_page.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_states.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_surface.dart';
 import 'package:wayhunter_mobile/features/auth/presentation/auth_gate.dart';
+import 'package:wayhunter_mobile/features/notifications/presentation/notifications_screen.dart';
 import 'package:wayhunter_mobile/features/profile/data/my_profile_api.dart';
 import 'package:wayhunter_mobile/features/profile/presentation/account_read_panel.dart';
-
-const notificationsPlaceholderRoute = 'notifications.home';
 
 class MyProfileScreen extends StatelessWidget {
   const MyProfileScreen({super.key, this.api});
@@ -69,9 +68,7 @@ class MyProfileScreen extends StatelessWidget {
             ),
           ListTile(
             title: const Text('Notifications'),
-            onTap: () => const AppDestination(
-              notificationsPlaceholderRoute,
-            ).open(context),
+            onTap: () => const AppDestination(notificationsRoute).open(context),
           ),
         ],
       ],

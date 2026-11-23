@@ -7,6 +7,8 @@ import 'package:wayhunter_mobile/features/advertisements/data/home_advertisement
 import 'package:wayhunter_mobile/features/auth/data/identity_api.dart';
 import 'package:wayhunter_mobile/features/auth/presentation/auth_flow.dart';
 import 'package:wayhunter_mobile/features/home/presentation/views/home_screen.dart';
+import 'package:wayhunter_mobile/features/notifications/data/notifications_api.dart';
+import 'package:wayhunter_mobile/features/notifications/presentation/notifications_screen.dart';
 import 'package:wayhunter_mobile/features/profile/data/my_profile_api.dart';
 import 'package:wayhunter_mobile/features/profile/presentation/my_profile_screen.dart';
 import 'package:wayhunter_mobile/features/traveller/active_trip/data/trip_sessions_api.dart';
@@ -67,9 +69,14 @@ Map<String, RouteRegistration<Object?>> person1Routes(
             : MyProfileApi(services.api, services.session),
       );
     }),
-    notificationsPlaceholderRoute: RouteRegistration<Null>(
-      (_, _) =>
-          const WayhunterUnavailableView(title: 'Notifications unavailable'),
+    notificationsRoute: RouteRegistration<Null>(
+      (context, _) => _withFoundation(
+        context,
+        (services) => NotificationsScreen(
+          api: NotificationsApi(services.api, services.session),
+          plans: TripPlansApi(services.api, services.session),
+        ),
+      ),
     ),
     AppRoutes.userProfile: RouteRegistration<UserRef>(
       (_, arguments) =>

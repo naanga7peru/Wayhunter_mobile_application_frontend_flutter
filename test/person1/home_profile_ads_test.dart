@@ -109,6 +109,7 @@ class _Harness {
       return switch (request.uri.path) {
         _me => profile?.call() ?? _json(_profile(other)),
         _ads => ads?.call(other) ?? _json([]),
+        '/api/mobile/notifications' => _json({'items': [], 'unreadCount': 0}),
         '/api/mobile/auth/logout' => const TransportResponse(204, []),
         '/api/mobile/identity/login' => _json({
           'userId': _other,
@@ -130,7 +131,7 @@ Future<void> _tap(WidgetTester tester, String label) async {
 
 void main() {
   testWidgets(
-    'Home greeting, scenic image, module entries and notifications placeholder',
+    'Home greeting, scenic image, module entries and notifications inbox',
     (tester) async {
       final h = _Harness()..mock();
       await h.open(tester);
@@ -148,7 +149,7 @@ void main() {
         await _tap(tester, 'Home');
       }
       await _tap(tester, 'Notifications');
-      expect(find.text('Notifications unavailable'), findsOneWidget);
+      expect(find.text('No notifications'), findsOneWidget);
     },
   );
 

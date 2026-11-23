@@ -8,7 +8,7 @@ import 'package:wayhunter_mobile/features/advertisements/data/home_advertisement
 import 'package:wayhunter_mobile/features/advertisements/presentation/home_banner.dart';
 import 'package:wayhunter_mobile/features/profile/data/my_profile_api.dart';
 import 'package:wayhunter_mobile/features/profile/presentation/account_read_panel.dart';
-import 'package:wayhunter_mobile/features/profile/presentation/my_profile_screen.dart';
+import 'package:wayhunter_mobile/features/notifications/presentation/notifications_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({
@@ -98,7 +98,7 @@ class HomeScreen extends StatelessWidget {
                               icon: const Icon(Icons.notifications_outlined),
                               label: const Text('Notifications'),
                               onPressed: () => const AppDestination(
-                                notificationsPlaceholderRoute,
+                                notificationsRoute,
                               ).open(context),
                             ),
                           ],
