@@ -8,6 +8,8 @@ import 'package:wayhunter_mobile/app/wayhunter_app.dart';
 import 'package:wayhunter_mobile/core/auth/session_controller.dart';
 import 'package:wayhunter_mobile/core/network/api_client.dart';
 import 'package:wayhunter_mobile/core/network/package_http_transport.dart';
+import 'package:wayhunter_mobile/core/services/android_location_services.dart';
+import 'package:wayhunter_mobile/core/services/device_interfaces.dart';
 import 'package:wayhunter_mobile/core/storage/android_credential_store.dart';
 import 'package:wayhunter_mobile/core/storage/credential_store.dart';
 
@@ -48,6 +50,10 @@ class _FoundationRoot extends StatefulWidget {
 }
 
 class _FoundationRootState extends State<_FoundationRoot> {
+  late final _locationServices =
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+      ? const AndroidLocationServices()
+      : null;
   late final http.Client _http = http.Client();
   late final SessionController _session = SessionController(_credentialStore());
   late final ApiClient _api = ApiClient(
@@ -73,6 +79,8 @@ class _FoundationRootState extends State<_FoundationRoot> {
   Widget build(BuildContext context) => FoundationServices(
     api: _api,
     session: _session,
+    permissions: _locationServices ?? const UnavailableDeviceServices(),
+    location: _locationServices ?? const UnavailableDeviceServices(),
     child: WayhunterApp.authenticated(
       environmentLabel: widget.config.environmentLabel,
       apiConfigured: widget.config.apiBaseUrl != null,
