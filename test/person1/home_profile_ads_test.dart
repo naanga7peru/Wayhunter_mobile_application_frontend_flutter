@@ -156,6 +156,37 @@ void main() {
     },
   );
 
+  for (final (scenario, adsResponse, fallback) in <(String, TransportResponse, String)>[
+    ('empty advertisement response', _json([]), 'No active advertisements'),
+    (
+      'advertisement request failure',
+      const TransportResponse(503, []),
+      'Could not load advertisements',
+    ),
+  ]) {
+    testWidgets('Home remains usable with $scenario', (tester) async {
+      final h = _Harness()..mock(ads: (_) => adsResponse);
+      await h.open(tester);
+
+      expect(find.text('Hello, First visitor'), findsOneWidget);
+      expect(find.text(fallback), findsOneWidget);
+      for (final label in ['Traveler', 'Location Hunter', 'Game']) {
+        await _tap(tester, label);
+        expect(
+          tester
+              .widget<NavigationBar>(find.byType(NavigationBar))
+              .selectedIndex,
+          1,
+        );
+        await _tap(tester, 'Home');
+        expect(find.text('Hello, First visitor'), findsOneWidget);
+      }
+      expect(tester.takeException(), isNull);
+      expect(tester.takeException(), isNull);
+      h.session.dispose();
+    });
+  }
+
   testWidgets(
     'My Profile shows owner fields and preserves Person 2 shortcuts',
     (tester) async {
