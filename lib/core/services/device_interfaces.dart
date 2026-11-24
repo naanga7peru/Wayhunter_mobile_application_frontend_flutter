@@ -60,6 +60,19 @@ class DeviceUnavailableException implements Exception {
   const DeviceUnavailableException();
 }
 
+enum LocationFailure {
+  serviceDisabled,
+  permissionDenied,
+  timedOut,
+  unavailable,
+}
+
+class LocationReadException extends DeviceUnavailableException {
+  const LocationReadException(this.reason);
+
+  final LocationFailure reason;
+}
+
 class UnavailableDeviceServices
     implements
         DevicePermissions,
