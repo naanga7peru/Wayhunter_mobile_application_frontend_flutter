@@ -8,6 +8,7 @@ import 'package:wayhunter_mobile/app/wayhunter_app.dart';
 import 'package:wayhunter_mobile/core/auth/session_controller.dart';
 import 'package:wayhunter_mobile/core/network/api_client.dart';
 import 'package:wayhunter_mobile/core/storage/credential_store.dart';
+import 'package:wayhunter_mobile/core/widgets/wayhunter_surface.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_states.dart';
 import 'package:wayhunter_mobile/features/advertisements/data/home_advertisements_api.dart';
 import 'package:wayhunter_mobile/features/advertisements/presentation/home_banner.dart';
@@ -85,9 +86,12 @@ class _Harness {
     accessToken: 'synthetic-owner',
   );
 
-  Future<void> open(WidgetTester tester) async {
+  Future<void> open(
+    WidgetTester tester, {
+    Size viewport = const Size(800, 1000),
+  }) async {
     tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(800, 1000);
+    tester.view.physicalSize = viewport;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     store.value = credential;
@@ -133,6 +137,97 @@ Future<void> _tap(WidgetTester tester, String label) async {
 }
 
 void main() {
+  const avatarUrl = 'https://images.example.invalid/home-avatar.png';
+
+  testWidgets('Home displays the authenticated avatar beside the greeting', (
+    tester,
+  ) async {
+    const provider = NetworkImage(avatarUrl);
+    final image = await tester.runAsync(() => createTestImage(cache: false));
+    final cache = PaintingBinding.instance.imageCache;
+    cache.putIfAbsent(
+      provider,
+      () =>
+          OneFrameImageStreamCompleter(Future.value(ImageInfo(image: image!))),
+    );
+    addTearDown(() => cache.evict(provider));
+    final h = _Harness()
+      ..mock(
+        profile: () => _json({..._profile(false), 'avatarUrl': avatarUrl}),
+      );
+    await h.open(tester);
+
+    final avatar = find.byWidgetPredicate(
+      (widget) => widget is Image && widget.image == provider,
+    );
+    expect(find.text('Hello, First visitor'), findsOneWidget);
+    expect(find.text('first@example.invalid'), findsNothing);
+    expect(avatar, findsOneWidget);
+    expect(
+      find.descendant(
+        of: avatar,
+        matching: find.byWidgetPredicate(
+          (widget) => widget is RawImage && widget.image != null,
+        ),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  for (final (label, url) in [
+    ('missing URL', null),
+    ('invalid URL', 'http://invalid.example/avatar.png'),
+    ('image request failure', avatarUrl),
+  ]) {
+    testWidgets('Home preserves greeting with avatar fallback on $label', (
+      tester,
+    ) async {
+      final h = _Harness()
+        ..mock(profile: () => _json({..._profile(false), 'avatarUrl': url}));
+      await h.open(tester);
+
+      expect(find.text('Hello, First visitor'), findsOneWidget);
+      expect(
+        find.widgetWithIcon(CircleAvatar, Icons.person_outline),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final (viewport, width) in [
+    (const Size(320, 640), 280.0),
+    (const Size(1280, 800), 560.0),
+  ]) {
+    testWidgets('Home avatar and module navigation at ${viewport.width} px', (
+      tester,
+    ) async {
+      final h = _Harness()..mock();
+      await h.open(tester, viewport: viewport);
+
+      expect(
+        tester.getSize(find.byType(WayhunterSurfaceCard).first).width,
+        width,
+      );
+      expect(find.text('Hello, First visitor'), findsOneWidget);
+      expect(
+        find.widgetWithIcon(CircleAvatar, Icons.person_outline),
+        findsOneWidget,
+      );
+      for (final label in ['Traveler', 'Location Hunter', 'Game']) {
+        await _tap(tester, label);
+        expect(
+          tester
+              .widget<NavigationBar>(find.byType(NavigationBar))
+              .selectedIndex,
+          1,
+        );
+        await _tap(tester, 'Home');
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets(
     'Home greeting, scenic image, module entries and notifications inbox',
     (tester) async {
