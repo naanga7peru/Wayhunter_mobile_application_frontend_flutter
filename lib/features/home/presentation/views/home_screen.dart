@@ -70,9 +70,7 @@ class HomeScreen extends StatelessWidget {
                           load: profile.read,
                           content: (owner) => owner == null
                               ? const Text('Profile details unavailable')
-                              : WayhunterHeader(
-                                  title: 'Hello, ${owner.displayName}',
-                                ),
+                              : _HomeProfileHeader(profile: owner),
                         ),
                       const WayhunterHeader(title: 'Choose a module'),
                       for (final module in ModuleId.values) ...[
@@ -122,6 +120,45 @@ class HomeScreen extends StatelessWidget {
       ),
     ],
   );
+}
+
+class _HomeProfileHeader extends StatelessWidget {
+  const _HomeProfileHeader({required this.profile});
+
+  final MyProfile profile;
+
+  @override
+  Widget build(BuildContext context) {
+    const fallback = CircleAvatar(
+      backgroundColor: WayhunterColors.surface,
+      foregroundColor: WayhunterColors.ink,
+      child: Icon(Icons.person_outline),
+    );
+    final url = safePublicHttpsUrl(profile.avatarUrl?.toString());
+    return Row(
+      children: [
+        SizedBox.square(
+          dimension: WayhunterLayout.minimumTap,
+          child: ClipOval(
+            child: url == null
+                ? fallback
+                : Image.network(
+                    url.toString(),
+                    fit: BoxFit.cover,
+                    excludeFromSemantics: true,
+                    frameBuilder: (_, child, frame, _) =>
+                        frame == null ? fallback : child,
+                    errorBuilder: (_, _, _) => fallback,
+                  ),
+          ),
+        ),
+        const SizedBox(width: WayhunterLayout.medium),
+        Expanded(
+          child: WayhunterHeader(title: 'Hello, ${profile.displayName}'),
+        ),
+      ],
+    );
+  }
 }
 
 class _ModuleTile extends StatelessWidget {
