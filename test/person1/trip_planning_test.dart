@@ -559,7 +559,14 @@ void main() {
               );
             }
           case ApiMethod.delete:
-            fail('Versioned removal must not send a request without If-Match');
+            expect(request.uri.path, '$_base/$_id/stops/$_stopB');
+            expect(request.headers['If-Match'], '"$_nextVersion"');
+            expect(request.body, isNull);
+            saved = _plan(
+              name: 'Edited trip',
+              version: _nextVersion,
+              stops: [_stop(_stopA, 'First', 0)],
+            );
         }
         return _json(200, saved);
       });
@@ -574,23 +581,8 @@ void main() {
       await enter(tester, 0, 'Second');
       await tap(tester, find.text('Add stop'));
       await tap(tester, find.byTooltip('Move Second up'));
-      expect(
-        tester
-            .widget<IconButton>(
-              find.byWidgetPredicate(
-                (widget) =>
-                    widget is IconButton && widget.tooltip == 'Remove Second',
-              ),
-            )
-            .onPressed,
-        isNull,
-      );
-      expect(
-        find.text(
-          'Removing saved stops is unavailable for this versioned plan.',
-        ),
-        findsOneWidget,
-      );
+      await tap(tester, find.byTooltip('Remove Second'));
+      expect(find.text('Second'), findsNothing);
     },
   );
 

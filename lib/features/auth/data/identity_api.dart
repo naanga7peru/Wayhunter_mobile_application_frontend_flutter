@@ -37,9 +37,12 @@ class IdentityApi {
   }
 
   Future<void> verifyOtp(String email, String code) async {
-    final result = await _post('verify-otp', {'email': email, 'code': code});
-    if (result case {'verified': true, 'newlyActivated': bool()}) return;
-    throw const ApiException(ApiError.invalidResponse);
+    await _api.request(
+      ApiMethod.post,
+      [..._identity, 'verify-otp'],
+      jsonBody: {'email': email, 'code': code},
+      expectedSuccessStatus: 204,
+    );
   }
 
   Future<void> resendOtp(String email) async {
