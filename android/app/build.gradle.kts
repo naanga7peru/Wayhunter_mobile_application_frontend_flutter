@@ -1,7 +1,14 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+val mapsProperties = Properties().apply {
+    val contents = providers.fileContents(rootProject.layout.projectDirectory.file("maps.local.properties"))
+    load(contents.asText.orElse("").get().reader())
 }
 
 android {
@@ -30,6 +37,10 @@ android {
     }
 
     buildTypes {
+        debug {
+            manifestPlaceholders["MAPS_API_KEY"] =
+                mapsProperties.getProperty("MAPS_API_KEY", "").trim()
+        }
         release {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
