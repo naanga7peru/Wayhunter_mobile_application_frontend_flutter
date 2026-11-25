@@ -23,42 +23,67 @@ class HomeBanner extends StatefulWidget {
   State<HomeBanner> createState() => _HomeBannerState();
 }
 
-class _HomeBannerState extends State<HomeBanner> {
+class _HomeBannerState extends State<HomeBanner> with WidgetsBindingObserver {
   late List<HomeAdvertisement> _advertisements = widget.advertisements;
   int _currentIndex = 0;
   Timer? _rotationTimer;
   Timer? _refreshTimer;
   bool _refreshing = false;
+  bool _routeIsCurrent = false;
+  late bool _resumed;
+  int _sourceVersion = 0;
+
+  bool get _visible => _routeIsCurrent && _resumed;
 
   @override
   void initState() {
     super.initState();
-    _startTimers();
+    final binding = WidgetsBinding.instance;
+    _resumed =
+        (binding.lifecycleState ?? AppLifecycleState.resumed) ==
+        AppLifecycleState.resumed;
+    binding.addObserver(this);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final wasVisible = _visible;
+    _routeIsCurrent = ModalRoute.isCurrentOf(context) ?? true;
+    if (wasVisible != _visible) _restartTimers();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final wasVisible = _visible;
+    _resumed = state == AppLifecycleState.resumed;
+    if (wasVisible != _visible) _restartTimers();
   }
 
   @override
   void didUpdateWidget(covariant HomeBanner oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.loadAdvertisements, widget.loadAdvertisements) ||
+    final loaderChanged =
+        oldWidget.loadAdvertisements != widget.loadAdvertisements;
+    final dataChanged = !identical(
+      oldWidget.advertisements,
+      widget.advertisements,
+    );
+    if (loaderChanged || dataChanged) {
+      _sourceVersion++;
+      _setAdvertisements(widget.advertisements);
+    }
+    if (loaderChanged ||
         oldWidget.rotationInterval != widget.rotationInterval ||
         oldWidget.refreshInterval != widget.refreshInterval) {
-      _stopTimers();
-      _startTimers();
-    }
-    if (!identical(oldWidget.advertisements, widget.advertisements)) {
-      _setAdvertisements(widget.advertisements);
+      _restartTimers();
     }
   }
 
-  void _startTimers() {
-    if (_advertisements.length > 1 && widget.rotationInterval > Duration.zero) {
-      _rotationTimer = Timer.periodic(widget.rotationInterval, (_) {
-        if (!mounted || _advertisements.length < 2) return;
-        setState(
-          () => _currentIndex = (_currentIndex + 1) % _advertisements.length,
-        );
-      });
-    }
+  void _restartTimers() {
+    _stopTimers();
+    if (!_visible) return;
+    _syncRotationTimer();
     if (widget.loadAdvertisements case final loader?
         when widget.refreshInterval > Duration.zero) {
       _refreshTimer = Timer.periodic(widget.refreshInterval, (_) {
@@ -77,11 +102,14 @@ class _HomeBannerState extends State<HomeBanner> {
   Future<void> _refresh(
     Future<List<HomeAdvertisement>> Function() loader,
   ) async {
-    if (_refreshing || !mounted) return;
+    if (_refreshing || !mounted || !_visible) return;
     _refreshing = true;
+    final sourceVersion = _sourceVersion;
     try {
       final advertisements = await loader();
-      if (mounted) _setAdvertisements(advertisements);
+      if (mounted && sourceVersion == _sourceVersion) {
+        setState(() => _setAdvertisements(advertisements));
+      }
     } catch (_) {
       // Keep the last successful response visible when refresh is unavailable.
     } finally {
@@ -93,11 +121,11 @@ class _HomeBannerState extends State<HomeBanner> {
     _advertisements = advertisements;
     _currentIndex = 0;
     _syncRotationTimer();
-    if (mounted) setState(() {});
   }
 
   void _syncRotationTimer() {
-    if (_advertisements.length < 2 ||
+    if (!_visible ||
+        _advertisements.length < 2 ||
         widget.rotationInterval <= Duration.zero) {
       _rotationTimer?.cancel();
       _rotationTimer = null;
@@ -113,6 +141,7 @@ class _HomeBannerState extends State<HomeBanner> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _stopTimers();
     super.dispose();
   }

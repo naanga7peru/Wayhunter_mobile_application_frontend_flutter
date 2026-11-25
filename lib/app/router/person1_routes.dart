@@ -47,6 +47,16 @@ Map<String, RouteRegistration<Object?>> person1Routes(
     return sessions = TripSessionsApi(services.api, services.session);
   }
 
+  HomeAdvertisementsApi? homeAdvertisements;
+  HomeAdvertisementsApi advertisements(FoundationServices services) {
+    final current = homeAdvertisements;
+    if (current != null && current.uses(services.api, services.session)) {
+      return current;
+    }
+    return homeAdvertisements =
+        HomeAdvertisementsApi(services.api, services.session);
+  }
+
   return {
     person1AuthRoute: RouteRegistration<Null>((context, _) {
       final services = FoundationServices.of(context);
@@ -64,7 +74,7 @@ Map<String, RouteRegistration<Object?>> person1Routes(
             : MyProfileApi(services.api, services.session),
         advertisementsApi: services == null
             ? null
-            : HomeAdvertisementsApi(services.api, services.session),
+            : advertisements(services),
       );
     }),
     AppRoutes.traveller: RouteRegistration<Null>(

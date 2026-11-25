@@ -107,8 +107,10 @@ class HomeScreen extends StatelessWidget {
                         AccountReadPanel<List<HomeAdvertisement>>(
                           label: 'advertisements',
                           load: ads.read,
-                          content: (eligible) =>
-                              HomeBanner(advertisements: eligible),
+                          content: (eligible) => HomeBanner(
+                            advertisements: eligible,
+                            loadAdvertisements: ads.read,
+                          ),
                         ),
                     ],
                   ),

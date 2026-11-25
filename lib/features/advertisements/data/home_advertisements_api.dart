@@ -58,10 +58,16 @@ class HomeAdvertisement {
 }
 
 class HomeAdvertisementsApi {
-  const HomeAdvertisementsApi(this._api, this._session);
+  HomeAdvertisementsApi(this._api, this._session);
 
   final ApiClient _api;
   final SessionController _session;
+
+  ({String token, String owner, Future<List<HomeAdvertisement>> response})?
+  _pending;
+
+  bool uses(ApiClient api, SessionController session) =>
+      identical(_api, api) && identical(_session, session);
 
   Future<List<HomeAdvertisement>> read() async {
     final token = _session.accessToken;
@@ -69,6 +75,19 @@ class HomeAdvertisementsApi {
     if (token == null || owner == null) {
       throw const ApiException(ApiError.unauthorized);
     }
+    final pending = _pending;
+    if (pending != null && pending.token == token && pending.owner == owner) {
+      return pending.response;
+    }
+    late final Future<List<HomeAdvertisement>> response;
+    response = _read(token, owner).whenComplete(() {
+      if (identical(_pending?.response, response)) _pending = null;
+    });
+    _pending = (token: token, owner: owner, response: response);
+    return response;
+  }
+
+  Future<List<HomeAdvertisement>> _read(String token, String owner) async {
     final response = await _api.request(
       ApiMethod.get,
       ['api', 'mobile', 'advertisements', 'active'],

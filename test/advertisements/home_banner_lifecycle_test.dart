@@ -119,6 +119,83 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'retains a successful banner on failure and recovers from empty',
+    (tester) async {
+      var calls = 0;
+      await tester.pumpWidget(
+        _app(
+          HomeBanner(
+            advertisements: [_advertisement('Initial')],
+            loadAdvertisements: () async => switch (++calls) {
+              1 => [_advertisement('Updated')],
+              2 => throw StateError('offline'),
+              3 => [],
+              _ => _ads,
+            },
+          ),
+        ),
+      );
+
+      for (final (call, title) in [
+        (1, 'Updated'),
+        (2, 'Updated'),
+        (3, 'No active advertisements'),
+        (4, 'One'),
+      ]) {
+        await tester.pump(const Duration(seconds: 15));
+        await tester.pump();
+        expect(calls, call);
+        expect(find.text(title), findsOneWidget);
+      }
+      await tester.pump(const Duration(seconds: 3));
+      expect(find.text('Two'), findsOneWidget);
+    },
+  );
+
+  testWidgets('restores the source data and ignores a replaced loader result', (
+    tester,
+  ) async {
+    final pending = Completer<List<HomeAdvertisement>>();
+    await tester.pumpWidget(
+      _app(
+        HomeBanner(
+          advertisements: _ads,
+          loadAdvertisements: () => pending.future,
+        ),
+      ),
+    );
+    await tester.pump(const Duration(seconds: 15));
+    await tester.pumpWidget(
+      _app(
+        HomeBanner(
+          advertisements: [_advertisement('Replacement')],
+          loadAdvertisements: () async => [],
+        ),
+      ),
+    );
+    pending.complete([_advertisement('Superseded')]);
+    await tester.pump();
+    expect(find.text('Replacement'), findsOneWidget);
+    expect(find.text('Superseded'), findsNothing);
+  });
+
+  testWidgets('pauses rotation while Android is backgrounded', (tester) async {
+    await tester.pumpWidget(_app(HomeBanner(advertisements: _ads)));
+    await tester.pump(const Duration(seconds: 2));
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump(const Duration(seconds: 20));
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    expect(find.text('One'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+    expect(find.text('Two'), findsOneWidget);
+  });
+
   testWidgets('shows safe empty and API error fallbacks', (tester) async {
     await tester.pumpWidget(_app(const HomeBanner(advertisements: [])));
     expect(find.text('No active advertisements'), findsOneWidget);
