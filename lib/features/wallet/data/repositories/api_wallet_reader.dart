@@ -1,11 +1,13 @@
 import 'package:wayhunter_mobile/core/network/api_client.dart';
+import 'package:wayhunter_mobile/core/network/api_dto.dart';
+import 'package:wayhunter_mobile/core/network/session_api.dart';
 
 import '../../domain/repositories/wallet_reader.dart';
 
 class ApiWalletReader implements WalletReader {
   const ApiWalletReader(this._api);
 
-  final ApiClient _api;
+  final SessionApi _api;
   static const _base = ['api', 'mobile', 'coins-wallet'];
   static const _invalid = ApiException(ApiError.invalidResponse);
 
@@ -31,11 +33,16 @@ class ApiWalletReader implements WalletReader {
   Future<WalletTransactionPage> readTransactions({
     int page = 1,
     int pageSize = 20,
+    bool rewardsOnly = false,
   }) async {
     final dto = _object(
       await _get(
         ['me', 'transactions'],
-        {'page': page.toString(), 'pageSize': pageSize.toString()},
+        {
+          'page': page.toString(),
+          'pageSize': pageSize.toString(),
+          if (rewardsOnly) 'kind': 'Reward',
+        },
       ),
     );
     final responsePage = _field<int>(dto, 'page');
@@ -51,11 +58,18 @@ class ApiWalletReader implements WalletReader {
         items.length > totalCount) {
       throw _invalid;
     }
+    final entries = List<LiveWalletTransaction>.unmodifiable(
+      items.map(_transaction),
+    );
+    if (rewardsOnly &&
+        entries.any((entry) => entry.kind != WalletTransactionKind.reward)) {
+      throw _invalid;
+    }
     return (
       page: responsePage,
       pageSize: responsePageSize,
       totalCount: totalCount,
-      items: List<LiveWalletTransaction>.unmodifiable(items.map(_transaction)),
+      items: entries,
     );
   }
 
@@ -69,11 +83,26 @@ class ApiWalletReader implements WalletReader {
       5 => WalletTransactionKind.correction,
       _ => throw _invalid,
     };
+    final id = _text(dto, 'transactionId');
+    if (!isApiGuid(id)) throw _invalid;
+    final rewardType = switch (_field<int?>(dto, 'rewardType')) {
+      null => null,
+      1 => WalletRewardType.welcome,
+      2 => WalletRewardType.hunter,
+      3 => WalletRewardType.gameCreator,
+      4 => WalletRewardType.gameWinner,
+      _ => throw _invalid,
+    };
+    if (kind == WalletTransactionKind.reward && rewardType == null) {
+      throw _invalid;
+    }
     return (
-      id: _text(dto, 'transactionId'),
+      id: id,
       kind: kind,
       coins: _field<int>(dto, 'coinsAmount'),
       status: _text(dto, 'status'),
+      rewardType: rewardType,
+      recordedAt: decodeApiUtc(_text(dto, 'recordedAtUtc')),
     );
   }
 
@@ -84,13 +113,22 @@ class ApiWalletReader implements WalletReader {
     return List.unmodifiable(response.map(_offer));
   }
 
+  @override
+  Future<LiveVoucherOffer> readOffer(String id) async {
+    if (!isApiGuid(id)) throw const ApiException(ApiError.notFound);
+    final offer = _offer(await _get(['vouchers', 'offers', id]));
+    if (offer.id.toLowerCase() != id.toLowerCase()) throw _invalid;
+    return offer;
+  }
+
   static LiveVoucherOffer _offer(Object? value) {
     final dto = _object(value);
-    final validUntil = DateTime.tryParse(_text(dto, 'validUntilUtc'));
+    final id = _text(dto, 'offerId');
+    final validUntil = decodeApiUtc(_text(dto, 'validUntilUtc'));
     final stock = _field<int>(dto, 'availableStock');
     final cost = _field<int>(dto, 'costCoins');
     final referenceValue = _field<num>(dto, 'referenceValueLkr');
-    if (validUntil == null ||
+    if (!isApiGuid(id) ||
         stock < 0 ||
         cost < 0 ||
         !referenceValue.isFinite ||
@@ -98,7 +136,7 @@ class ApiWalletReader implements WalletReader {
       throw _invalid;
     }
     return (
-      id: _text(dto, 'offerId'),
+      id: id,
       code: _text(dto, 'offerCode'),
       cost: cost,
       referenceValueLkr: referenceValue,
@@ -109,12 +147,7 @@ class ApiWalletReader implements WalletReader {
   }
 
   Future<Object?> _get(List<String> path, [Map<String, String>? query]) =>
-      _api.request(
-        ApiMethod.get,
-        [..._base, ...path],
-        query: query,
-        requiresSession: true,
-      );
+      _api.request(ApiMethod.get, [..._base, ...path], query: query);
 
   static Map<String, Object?> _object(Object? value) {
     if (value is Map<String, Object?>) return value;
@@ -123,7 +156,7 @@ class ApiWalletReader implements WalletReader {
 
   static T _field<T>(Map<String, Object?> dto, String name) {
     final value = dto[name];
-    if (value is T) return value;
+    if (dto.containsKey(name) && value is T) return value;
     throw _invalid;
   }
 

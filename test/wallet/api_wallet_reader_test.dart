@@ -1,15 +1,15 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wayhunter_mobile/core/auth/access_token_source.dart';
+import 'package:wayhunter_mobile/core/auth/session_controller.dart';
 import 'package:wayhunter_mobile/core/network/api_client.dart';
+import 'package:wayhunter_mobile/core/network/session_api.dart';
+import 'package:wayhunter_mobile/core/storage/credential_store.dart';
 import 'package:wayhunter_mobile/features/wallet/data/repositories/api_wallet_reader.dart';
 import 'package:wayhunter_mobile/features/wallet/domain/repositories/wallet_reader.dart';
+import 'package:wayhunter_mobile/shared/domain/models/navigation_refs.dart';
 
-class _Tokens implements AccessTokenSource {
-  @override
-  String? accessToken = 'test-session';
-}
+import '../foundation/session_and_device_test.dart' show MemoryCredentialStore;
 
 class _Transport implements HttpTransport {
   final requests = <TransportRequest>[];
@@ -33,17 +33,27 @@ Matcher _apiError(ApiError kind) =>
 
 void main() {
   late _Transport transport;
-  late _Tokens tokens;
+  late SessionController session;
   late WalletReader reader;
 
-  setUp(() {
+  setUp(() async {
     transport = _Transport();
-    tokens = _Tokens();
+    session = SessionController(MemoryCredentialStore());
+    addTearDown(session.dispose);
+    await session.authenticate(
+      const SessionCredential(
+        user: UserRef('test-owner'),
+        accessToken: 'test-session',
+      ),
+    );
     reader = ApiWalletReader(
-      ApiClient(
-        baseUrl: Uri.parse('https://example.invalid'),
-        transport: transport,
-        tokens: tokens,
+      SessionApi(
+        ApiClient(
+          baseUrl: Uri.parse('https://example.invalid'),
+          transport: transport,
+          tokens: session,
+        ),
+        session,
       ),
     );
   });
@@ -75,6 +85,8 @@ void main() {
             'kind': 3,
             'coinsAmount': -10000,
             'status': 'Posted',
+            'rewardType': null,
+            'recordedAtUtc': '2026-11-26T08:00:00Z',
           },
         ],
       });
@@ -85,6 +97,8 @@ void main() {
         kind: WalletTransactionKind.debit,
         coins: -10000,
         status: 'Posted',
+        rewardType: null,
+        recordedAt: DateTime.utc(2026, 11, 26, 8),
       ));
 
       transport.json([
@@ -129,7 +143,7 @@ void main() {
   test(
     'all three reads require credentials before calling the transport',
     () async {
-      tokens.accessToken = null;
+      await session.clear();
       for (final read in [
         reader.readBalance,
         reader.readTransactions,
@@ -204,4 +218,79 @@ void main() {
       throwsA(_apiError(ApiError.network)),
     );
   });
+
+  test(
+    'offer detail validates the requested identity and propagates 404',
+    () async {
+      const id = 'e2ebc14a-019a-4093-8b67-547e72c696c8';
+      const offer = {
+        'offerId': id,
+        'offerCode': 'SAMPLE-LKR-100',
+        'costCoins': 10000,
+        'referenceValueLkr': 100,
+        'validUntilUtc': '2027-01-01T00:00:00Z',
+        'availableStock': 4,
+        'isEligible': false,
+      };
+      transport.json(offer);
+      expect((await reader.readOffer(id)).isEligible, isFalse);
+      expect(
+        transport.requests.single.uri.path,
+        '/api/mobile/coins-wallet/vouchers/offers/$id',
+      );
+      transport.json({
+        ...offer,
+        'offerId': 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+      });
+      await expectLater(
+        reader.readOffer(id),
+        throwsA(_apiError(ApiError.invalidResponse)),
+      );
+      transport.json(null, status: 404);
+      await expectLater(
+        reader.readOffer(id),
+        throwsA(_apiError(ApiError.notFound)),
+      );
+    },
+  );
+
+  test(
+    'reward history uses the server filter and validates kind and reward type',
+    () async {
+      const entry = {
+        'transactionId': 'e2ebc14a-019a-4093-8b67-547e72c696c8',
+        'kind': 1,
+        'coinsAmount': 200,
+        'status': 'Posted',
+        'rewardType': 2,
+        'recordedAtUtc': '2026-11-26T08:00:00Z',
+      };
+      const page = {'page': 1, 'pageSize': 20, 'totalCount': 1};
+      transport.json({
+        ...page,
+        'items': [entry],
+      });
+      final result = await reader.readTransactions(rewardsOnly: true);
+      expect(result.items.single.rewardType, WalletRewardType.hunter);
+      expect(transport.requests.single.uri.queryParameters, {
+        'page': '1',
+        'pageSize': '20',
+        'kind': 'Reward',
+      });
+      for (final invalid in [
+        {...entry, 'kind': 2, 'rewardType': null},
+        {...entry, 'rewardType': 99},
+        {...entry, 'recordedAtUtc': '2026-11-31T08:00:00Z'},
+      ]) {
+        transport.json({
+          ...page,
+          'items': [invalid],
+        });
+        await expectLater(
+          reader.readTransactions(rewardsOnly: true),
+          throwsA(_apiError(ApiError.invalidResponse)),
+        );
+      }
+    },
+  );
 }

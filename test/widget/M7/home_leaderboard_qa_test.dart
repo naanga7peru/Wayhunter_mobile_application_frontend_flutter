@@ -184,6 +184,7 @@ class _Transport implements HttpTransport {
         );
       case '/api/mobile/advertisements/active':
       case '/api/mobile/trip-invitations/pending':
+      case '/api/mobile/hunter/places':
         return TransportResponse(200, utf8.encode('[]'));
       case walletBalancePath:
         return walletBalanceResponse();

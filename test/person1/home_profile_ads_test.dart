@@ -110,14 +110,20 @@ class _Harness {
 
   void mock({
     FutureOr<TransportResponse> Function()? profile,
+    FutureOr<TransportResponse> Function(TransportRequest)? updateProfile,
     FutureOr<TransportResponse> Function(bool other)? ads,
   }) {
     transport.respond = (request) {
       final other =
           request.headers['Authorization'] == 'Bearer synthetic-other';
       return switch (request.uri.path) {
+        _me when request.method == ApiMethod.put && updateProfile != null =>
+          updateProfile(request),
         _me => profile?.call() ?? _json(_profile(other)),
         _ads => ads?.call(other) ?? _json([]),
+        '/api/mobile/hunter/places' ||
+        '/api/mobile/hunter/submissions' ||
+        '/api/mobile/games/me' => _json([]),
         walletBalancePath => walletBalanceResponse(),
         '/api/mobile/notifications' => _json({'items': [], 'unreadCount': 0}),
         '/api/mobile/auth/logout' => const TransportResponse(204, []),
@@ -315,8 +321,8 @@ void main() {
       expect(find.byType(Image), findsNothing);
       for (final (label, state) in [
         ('Wallet', '$fixtureSpendableCoins'),
-        ('My Hunts', 'Hunt history unavailable'),
-        ('My Games', 'Game history unavailable'),
+        ('My Hunts', 'No hunts yet'),
+        ('My Games', 'No games yet'),
       ]) {
         await _tap(tester, label);
         expect(find.text(state), findsOneWidget);
@@ -324,10 +330,7 @@ void main() {
         await _finishTransition(tester);
       }
       await _tap(tester, 'Edit Profile');
-      expect(
-        find.text('This feature is currently unavailable.'),
-        findsOneWidget,
-      );
+      expect(find.text('Save profile'), findsOneWidget);
     },
   );
 
@@ -354,6 +357,44 @@ void main() {
     await _tap(tester, 'Retry');
     expect(find.text('No profile details available'), findsOneWidget);
   });
+
+  testWidgets(
+    'Edit Profile sends only supported fields and refreshes Profile',
+    (tester) async {
+      final h = _Harness();
+      var profile = _profile(false);
+      h.mock(
+        profile: () => _json(profile),
+        updateProfile: (request) {
+          expect(request.headers['Authorization'], 'Bearer synthetic-owner');
+          expect(jsonDecode(request.body!), {
+            'displayName': 'Updated visitor',
+            'bio': null,
+          });
+          profile = {...profile, 'displayName': 'Updated visitor', 'bio': null};
+          return _json(profile);
+        },
+      );
+      await h.open(tester);
+      await _tap(tester, 'Profile');
+      await _tap(tester, 'Edit Profile');
+      expect(find.text('First visitor'), findsOneWidget);
+      await tester.enterText(find.byType(TextFormField).first, ' ');
+      await _tap(tester, 'Save profile');
+      expect(
+        h.transport.requests.where((r) => r.method == ApiMethod.put),
+        isEmpty,
+      );
+      await tester.enterText(
+        find.byType(TextFormField).first,
+        ' Updated visitor ',
+      );
+      await tester.enterText(find.byType(TextFormField).last, '');
+      await _tap(tester, 'Save profile');
+      expect(find.text('Updated visitor'), findsOneWidget);
+      expect(find.text('Synthetic bio'), findsNothing);
+    },
+  );
 
   test(
     'ad adapter uses the exact bearer query and filters ineligible and unsafe assets',

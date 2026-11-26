@@ -30,6 +30,31 @@ typedef MyGameAttempt = ({
   int totalSteps,
 });
 
+enum GameCreationStatus {
+  pending,
+  approved,
+  rejected,
+  archived,
+  draft,
+  disabled,
+}
+
+class CreatedGameSummary {
+  const CreatedGameSummary(
+    this.title,
+    this.status, {
+    this.id,
+    this.expiresAt,
+    this.rejectionReason,
+  });
+
+  final String title;
+  final GameCreationStatus status;
+  final String? id;
+  final DateTime? expiresAt;
+  final String? rejectionReason;
+}
+
 abstract interface class GamesReader {
   Future<List<PublicGame>> readGames();
   Future<PublicGameDetails?> readGame(String id);

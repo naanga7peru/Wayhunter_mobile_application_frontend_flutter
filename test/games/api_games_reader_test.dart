@@ -1,10 +1,15 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wayhunter_mobile/core/auth/access_token_source.dart';
+import 'package:wayhunter_mobile/core/auth/session_controller.dart';
+import 'package:wayhunter_mobile/core/network/session_api.dart';
 import 'package:wayhunter_mobile/core/network/api_client.dart';
+import 'package:wayhunter_mobile/core/storage/credential_store.dart';
 import 'package:wayhunter_mobile/features/games/data/api_games_reader.dart';
 import 'package:wayhunter_mobile/features/games/domain/games_reader.dart';
+import 'package:wayhunter_mobile/shared/domain/models/navigation_refs.dart';
+
+import '../foundation/session_and_device_test.dart' show MemoryCredentialStore;
 
 const gameId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 const attemptId = '11111111-2222-3333-4444-555555555555';
@@ -29,19 +34,26 @@ const attemptJson = {
 
 void main() {
   late _Transport transport;
-  late _Tokens tokens;
+  late SessionController session;
+  late ApiClient client;
   late ApiGamesReader reader;
 
-  setUp(() {
+  setUp(() async {
     transport = _Transport();
-    tokens = _Tokens();
-    reader = ApiGamesReader(
-      ApiClient(
-        baseUrl: Uri.parse('https://wayhunter.test'),
-        transport: transport,
-        tokens: tokens,
+    session = SessionController(MemoryCredentialStore());
+    addTearDown(session.dispose);
+    await session.authenticate(
+      const SessionCredential(
+        user: UserRef('owner-one'),
+        accessToken: 'account-one',
       ),
     );
+    client = ApiClient(
+      baseUrl: Uri.parse('https://wayhunter.test'),
+      transport: transport,
+      tokens: session,
+    );
+    reader = ApiGamesReader(SessionApi(client, session));
   });
 
   test(
@@ -160,7 +172,7 @@ void main() {
     () async {
       transport.body = [];
       await reader.readMyAttempts();
-      tokens.accessToken = null;
+      await session.clear();
       await expectLater(
         reader.readGames(),
         throwsA(_error(ApiError.unauthorized)),
@@ -174,11 +186,44 @@ void main() {
         throwsA(_error(ApiError.unauthorized)),
       );
       expect(transport.requests, hasLength(1));
-      tokens.accessToken = 'account-two';
-      await reader.readMyAttempts();
+      await session.authenticate(
+        const SessionCredential(
+          user: UserRef('owner-two'),
+          accessToken: 'account-two',
+        ),
+      );
+      await expectLater(
+        reader.readMyGames(),
+        throwsA(_error(ApiError.unauthorized)),
+      );
+      await ApiGamesReader(SessionApi(client, session)).readMyAttempts();
       expect(
         transport.requests.last.headers['Authorization'],
         'Bearer account-two',
+      );
+    },
+  );
+  test(
+    'creator history retains expired games and validates server status',
+    () async {
+      const game = {
+        'gameId': gameId,
+        'title': 'Archived trail',
+        'status': 3,
+        'approvedAtUtc': timestamp,
+        'expiresAtUtc': '2026-12-23T08:00:00Z',
+      };
+      transport.body = [game];
+      final result = (await reader.readMyGames()).single;
+      expect(result.status, GameCreationStatus.archived);
+      expect(result.expiresAt, DateTime.utc(2026, 12, 23, 8));
+      expect(transport.requests.single.uri.path, '/api/mobile/games/me');
+      transport.body = [
+        {...game, 'status': 99},
+      ];
+      await expectLater(
+        reader.readMyGames(),
+        throwsA(_error(ApiError.invalidResponse)),
       );
     },
   );
@@ -186,11 +231,6 @@ void main() {
 
 TypeMatcher<ApiException> _error(ApiError kind) =>
     isA<ApiException>().having((error) => error.kind, 'kind', kind);
-
-class _Tokens implements AccessTokenSource {
-  @override
-  String? accessToken = 'account-one';
-}
 
 class _Transport implements HttpTransport {
   final requests = <TransportRequest>[];

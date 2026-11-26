@@ -23,10 +23,12 @@ class WalletHomeScreen extends StatelessWidget {
     this.embedded = false,
     this.reader,
     this.redemption,
+    this.allowRedemptionMutations = false,
   });
 
   final WalletReader? reader;
   final VoucherRedemptionRepository? redemption;
+  final bool allowRedemptionMutations;
 
   final bool embedded;
 
@@ -35,6 +37,7 @@ class WalletHomeScreen extends StatelessWidget {
     demo: false,
     reader: reader,
     redemption: redemption,
+    allowRedemptionMutations: allowRedemptionMutations,
     embedded: embedded,
     readBalance: () async => null,
   );
@@ -53,6 +56,7 @@ class _WalletHome extends StatefulWidget {
     required this.readBalance,
     this.reader,
     this.redemption,
+    this.allowRedemptionMutations = false,
     this.embedded = false,
   });
 
@@ -60,6 +64,7 @@ class _WalletHome extends StatefulWidget {
   final Future<WalletBalance?> Function() readBalance;
   final WalletReader? reader;
   final VoucherRedemptionRepository? redemption;
+  final bool allowRedemptionMutations;
   final bool embedded;
 
   @override
@@ -134,6 +139,13 @@ class _WalletHomeState extends State<_WalletHome> {
               : _History(demo: widget.demo),
         ),
       ),
+      if (widget.reader case final reader?)
+        _WalletLink(
+          title: 'Reward History',
+          icon: Icons.stars_outlined,
+          onTap: () =>
+              _open(context, _LiveHistory(reader: reader, rewardsOnly: true)),
+        ),
       _WalletLink(
         title: 'Voucher Offers',
         icon: Icons.local_offer_outlined,
@@ -143,7 +155,9 @@ class _WalletHomeState extends State<_WalletHome> {
             widget.reader != null
                 ? _LiveOffers(
                     reader: widget.reader!,
-                    redemption: widget.redemption,
+                    redemption: widget.allowRedemptionMutations
+                        ? widget.redemption
+                        : null,
                   )
                 : _Offers(demo: widget.demo, balance: _balance),
           );
@@ -160,7 +174,13 @@ class _WalletHomeState extends State<_WalletHome> {
           title: 'Find voucher request',
           icon: Icons.search,
           onTap: () async {
-            await _open(context, _VoucherLookup(repository: redemption));
+            await _open(
+              context,
+              _VoucherLookup(
+                repository: redemption,
+                allowCancellation: widget.allowRedemptionMutations,
+              ),
+            );
             if (mounted) _retry();
           },
         ),
@@ -309,9 +329,10 @@ class _History extends StatelessWidget {
 }
 
 class _LiveHistory extends StatefulWidget {
-  const _LiveHistory({required this.reader});
+  const _LiveHistory({required this.reader, this.rewardsOnly = false});
 
   final WalletReader reader;
+  final bool rewardsOnly;
 
   @override
   State<_LiveHistory> createState() => _LiveHistoryState();
@@ -328,19 +349,26 @@ class _LiveHistoryState extends State<_LiveHistory> {
 
   @override
   Widget build(BuildContext context) => _WalletPage(
-    title: 'Transaction History',
+    title: widget.rewardsOnly ? 'Reward History' : 'Transaction History',
     demo: false,
     children: [
       _WalletRead<WalletTransactionPage>(
         key: ValueKey(_page),
-        label: 'transaction history',
-        read: () =>
-            widget.reader.readTransactions(page: _page, pageSize: _pageSize),
+        label: widget.rewardsOnly ? 'reward history' : 'transaction history',
+        read: () => widget.reader.readTransactions(
+          page: _page,
+          pageSize: _pageSize,
+          rewardsOnly: widget.rewardsOnly,
+        ),
         content: (result) => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (result.items.isEmpty)
-              const WayhunterEmptyView(title: 'No transactions on this page'),
+              WayhunterEmptyView(
+                title: widget.rewardsOnly
+                    ? 'No rewards on this page'
+                    : 'No transactions on this page',
+              ),
             for (final entry in result.items) _liveTransaction(entry),
             Text('Page ${result.page}'),
             Wrap(
@@ -368,7 +396,7 @@ class _LiveHistoryState extends State<_LiveHistory> {
 
   Widget _liveTransaction(LiveWalletTransaction entry) {
     final kind = switch (entry.kind) {
-      WalletTransactionKind.reward => 'Reward',
+      WalletTransactionKind.reward => entry.rewardType?.label ?? 'Reward',
       WalletTransactionKind.hold => 'Hold',
       WalletTransactionKind.debit => 'Debit',
       WalletTransactionKind.release => 'Release',
@@ -393,6 +421,11 @@ class _LiveHistoryState extends State<_LiveHistory> {
           children: [
             WayhunterHeader(title: kind, subtitle: entry.status),
             _TransactionAmount(coins: entry.coins),
+            Text(
+              MaterialLocalizations.of(
+                context,
+              ).formatMediumDate(entry.recordedAt.toLocal()),
+            ),
           ],
         ),
       ),
@@ -489,27 +522,11 @@ class _LiveOffers extends StatelessWidget {
                           title: 'Offer details',
                           demo: false,
                           children: [
-                            WayhunterHeader(title: offer.code),
-                            Text(
-                              'Redemption cost · ${formatCoins(offer.cost)} Coins',
+                            _WalletRead<LiveVoucherOffer>(
+                              label: 'voucher offer',
+                              read: () => reader.readOffer(offer.id),
+                              content: (detail) => _details(context, detail),
                             ),
-                            Text(
-                              'Reference value · LKR ${offer.referenceValueLkr.toStringAsFixed(2)}',
-                            ),
-                            Text(
-                              'Valid until · ${MaterialLocalizations.of(context).formatMediumDate(offer.validUntil.toLocal())} '
-                              '${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(offer.validUntil.toLocal()))}',
-                            ),
-                            Text(_offerStock(offer)),
-                            Text(_offerEligibility(offer)),
-                            if (redemption case final repository?)
-                              _LiveRedemptionForm(
-                                offer: offer,
-                                reader: reader,
-                                repository: repository,
-                              )
-                            else
-                              const Text('Voucher redemption unavailable'),
                           ],
                         ),
                       ),
@@ -519,6 +536,36 @@ class _LiveOffers extends StatelessWidget {
       ),
     ],
   );
+
+  Widget _details(BuildContext context, LiveVoucherOffer offer) {
+    final localizations = MaterialLocalizations.of(context);
+    final expiry = offer.validUntil.toLocal();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: WayhunterLayout.small,
+      children: [
+        WayhunterHeader(title: offer.code),
+        Text('Redemption cost · ${formatCoins(offer.cost)} Coins'),
+        Text(
+          'Reference value · LKR ${offer.referenceValueLkr.toStringAsFixed(2)}',
+        ),
+        Text(
+          'Valid until · ${localizations.formatMediumDate(expiry)} '
+          '${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(expiry))}',
+        ),
+        Text(_offerStock(offer)),
+        Text(_offerEligibility(offer)),
+        if (redemption case final repository?)
+          _LiveRedemptionForm(
+            offer: offer,
+            reader: reader,
+            repository: repository,
+          )
+        else
+          const Text('Voucher redemption unavailable'),
+      ],
+    );
+  }
 
   String _offerStock(LiveVoucherOffer offer) => offer.availableStock == 0
       ? 'Out of stock'

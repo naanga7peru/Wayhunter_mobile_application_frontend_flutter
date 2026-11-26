@@ -1,5 +1,6 @@
 import 'package:wayhunter_mobile/core/auth/session_controller.dart';
 import 'package:wayhunter_mobile/core/network/api_client.dart';
+import 'package:wayhunter_mobile/core/network/session_api.dart';
 
 class MyProfile {
   const MyProfile({
@@ -46,33 +47,40 @@ Uri? safePublicHttpsUrl(String? value) {
 }
 
 class MyProfileApi {
-  const MyProfileApi(this._api, this._session);
+  MyProfileApi(ApiClient api, SessionController session)
+    : _sessionApi = SessionApi(api, session);
 
-  final ApiClient _api;
-  final SessionController _session;
+  final SessionApi _sessionApi;
+  static const _path = ['api', 'mobile', 'identity', 'me'];
 
   Future<MyProfile?> read() async {
-    final token = _session.accessToken;
-    final owner = _session.state.user?.id;
-    if (token == null || owner == null) {
-      throw const ApiException(ApiError.unauthorized);
+    final response = await _sessionApi.request(ApiMethod.get, _path);
+    return response == null ? null : _decode(response);
+  }
+
+  Future<MyProfile> update({required String displayName, String? bio}) async {
+    final name = displayName.trim();
+    if (name.isEmpty || name.length > 200 || (bio?.length ?? 0) > 500) {
+      throw const ApiException(ApiError.rejected);
     }
-    final response = await _api.request(ApiMethod.get, [
-      'api',
-      'mobile',
-      'identity',
-      'me',
-    ], requiresSession: true);
-    if (_session.accessToken != token || _session.state.user?.id != owner) {
-      throw const ApiException(ApiError.unauthorized);
-    }
-    if (response == null) return null;
+    return _decode(
+      await _sessionApi.request(
+        ApiMethod.put,
+        _path,
+        body: {'displayName': name, 'bio': bio},
+      ),
+    );
+  }
+
+  MyProfile _decode(Object? response) {
     if (response case {
       'userId': final String userId,
       'displayName': final String displayName,
       'email': final String email,
     }) {
-      if (userId != owner) throw const ApiException(ApiError.forbidden);
+      if (userId != _sessionApi.owner) {
+        throw const ApiException(ApiError.forbidden);
+      }
       final fields = response as Map;
       final avatar = fields['avatarUrl'];
       final bio = fields['bio'];

@@ -48,6 +48,7 @@ class _Reader implements WalletReader {
   Future<WalletTransactionPage> readTransactions({
     int page = 1,
     int pageSize = 20,
+    bool rewardsOnly = false,
   }) {
     pages.add(page);
     return transactions(page, pageSize);
@@ -55,6 +56,10 @@ class _Reader implements WalletReader {
 
   @override
   Future<List<LiveVoucherOffer>> readOffers() => offers();
+
+  @override
+  Future<LiveVoucherOffer> readOffer(String id) async =>
+      (await offers()).singleWhere((offer) => offer.id == id);
 }
 
 void main() {
@@ -64,7 +69,11 @@ void main() {
     final repository = _RedemptionRepository()..approved = true;
     await tester.pumpWidget(
       MaterialApp(
-        home: WalletHomeScreen(reader: _Reader(), redemption: repository),
+        home: WalletHomeScreen(
+          reader: _Reader(),
+          redemption: repository,
+          allowRedemptionMutations: true,
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -110,7 +119,11 @@ void main() {
       final repository = _RedemptionRepository();
       await tester.pumpWidget(
         MaterialApp(
-          home: WalletHomeScreen(reader: reader, redemption: repository),
+          home: WalletHomeScreen(
+            reader: reader,
+            redemption: repository,
+            allowRedemptionMutations: true,
+          ),
         ),
       );
       await tester.pumpAndSettle();
@@ -148,7 +161,7 @@ void main() {
     addTearDown(session.dispose);
     final transport = FakeTransport((request) async {
       final body = request.uri.path.endsWith('/transactions')
-          ? '{"page":1,"pageSize":20,"totalCount":1,"items":[{"transactionId":"test","kind":1,"coinsAmount":777,"status":"Posted"}]}'
+          ? '{"page":1,"pageSize":20,"totalCount":1,"items":[{"transactionId":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","kind":1,"coinsAmount":777,"status":"Posted","rewardType":1,"recordedAtUtc":"2026-11-26T08:00:00Z"}]}'
           : '{"postedCoins":300,"reservedCoins":0,"spendableCoins":300,"lifetimeEarnedCoins":500}';
       return TransportResponse(200, utf8.encode(body));
     });
@@ -267,6 +280,8 @@ void main() {
                 : WalletTransactionKind.hold,
             coins: page == 1 ? 100 : -10000,
             status: page == 1 ? 'Posted' : 'Pending',
+            rewardType: page == 1 ? WalletRewardType.welcome : null,
+            recordedAt: DateTime.utc(2026, 11, 26),
           ),
         ],
       );
@@ -276,7 +291,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tapLabel(tester, 'Transaction History');
-    expect(find.text('Reward'), findsOneWidget);
+    expect(find.text('Welcome reward'), findsOneWidget);
     expect(find.text('+100 Coins'), findsOneWidget);
     expect(find.text('Posted'), findsOneWidget);
     await tapLabel(tester, 'Next page');

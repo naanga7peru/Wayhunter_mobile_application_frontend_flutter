@@ -218,10 +218,22 @@ void main() {
     (tester) async {
       final previousAccount = Completer<TransportResponse>();
       final transport = _GamesTransport()
-        ..respond = (request) async =>
-            request.headers['Authorization'] == 'Bearer first'
-            ? previousAccount.future
-            : _response([_attempt]);
+        ..respond = (request) async {
+          if (request.uri.path == '/api/mobile/games/me') {
+            return _response([
+              {
+                'gameId': _gameId,
+                'title': 'Archived creator trail',
+                'status': 3,
+                'approvedAtUtc': '2026-10-20T10:00:00Z',
+                'expiresAtUtc': '2026-11-19T10:00:00Z',
+              },
+            ]);
+          }
+          return request.headers['Authorization'] == 'Bearer first'
+              ? previousAccount.future
+              : _response([_attempt]);
+        };
       final session = await _openAuthenticatedGameZone(tester, transport);
       await tester.ensureVisible(find.text('My Game Attempts'));
       await tester.tap(find.text('My Game Attempts'));
@@ -266,10 +278,16 @@ void main() {
       await tester.pageBack();
       await tester.pumpAndSettle();
       await _tap(tester, 'My Games');
-      expect(find.text('Game history unavailable'), findsOneWidget);
+      expect(find.text('Archived creator trail'), findsOneWidget);
+      expect(find.text('Archived'), findsOneWidget);
       expect(find.text('Player history'), findsNothing);
       expect(find.text('Attempt ID: $_attemptId'), findsNothing);
-      expect(transport.gameRequests, hasLength(2));
+      expect(transport.gameRequests, hasLength(3));
+      expect(transport.gameRequests.last.uri.path, '/api/mobile/games/me');
+      expect(
+        transport.gameRequests.last.headers['Authorization'],
+        'Bearer second',
+      );
     },
   );
 

@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:wayhunter_mobile/app/bootstrap/foundation_services.dart';
 import 'package:wayhunter_mobile/app/router/app_routes.dart';
 import 'package:wayhunter_mobile/core/network/api_client.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_controls.dart';
@@ -14,6 +16,7 @@ import 'package:wayhunter_mobile/features/traveller/planning/data/trip_plans_api
 import 'package:wayhunter_mobile/features/traveller/planning/domain/trip_plan.dart';
 import 'package:wayhunter_mobile/features/traveller/planning/presentation/trip_editor.dart';
 import 'package:wayhunter_mobile/features/traveller/planning/presentation/trip_plan_widgets.dart';
+import 'package:wayhunter_mobile/features/traveller/planning/presentation/traveller_location_picker.dart';
 import 'package:wayhunter_mobile/shared/domain/models/navigation_refs.dart';
 
 class TravellerHome extends StatelessWidget {
@@ -108,6 +111,7 @@ class SavedTripDetails extends StatefulWidget {
 
 class _SavedTripDetailsState extends State<SavedTripDetails> {
   final _stop = TextEditingController();
+  LatLng? _stopLocation;
   late Future<TripPlan> _plan = widget.api.get(widget.reference.id);
   String? _error;
   bool _busy = false;
@@ -182,10 +186,34 @@ class _SavedTripDetailsState extends State<SavedTripDetails> {
     }
     FocusScope.of(context).unfocus();
     _mutate(() async {
-      final updated = await widget.api.addStop(plan, name);
-      if (mounted) _stop.clear();
+      final updated = await widget.api.addStop(
+        plan,
+        TripStopDraft(
+          name,
+          latitude: _stopLocation?.latitude,
+          longitude: _stopLocation?.longitude,
+        ),
+      );
+      if (mounted) {
+        _stop.clear();
+        _stopLocation = null;
+      }
       return updated;
     });
+  }
+
+  Future<void> _pickStopLocation(FoundationServices services) async {
+    final point = await Navigator.of(context).push<LatLng>(
+      MaterialPageRoute(
+        builder: (_) => TravellerLocationPicker(
+          maps: services.maps,
+          location: services.location,
+          permissions: services.permissions,
+          initialSelection: _stopLocation,
+        ),
+      ),
+    );
+    if (mounted && point != null) setState(() => _stopLocation = point);
   }
 
   void _move(TripPlan plan, int from, int to) {
@@ -242,6 +270,8 @@ class _SavedTripDetailsState extends State<SavedTripDetails> {
   }
 
   Widget _trip(TripPlan plan) {
+    final services = context
+        .dependOnInheritedWidgetOfExactType<FoundationServices>();
     final knownSession = widget.sessions.known(widget.reference);
     final startBlocked = widget.sessions.startNeedsVerification(
       widget.reference,
@@ -295,6 +325,10 @@ class _SavedTripDetailsState extends State<SavedTripDetails> {
           for (final (i, stop) in plan.stops.indexed)
             TripStopTile(
               name: stop.name,
+              coordinates: stop.latitude == null
+                  ? null
+                  : 'Saved pin ${stop.latitude!.toStringAsFixed(5)}, '
+                        '${stop.longitude!.toStringAsFixed(5)}',
               index: i,
               moveUp: editable && i > 0 ? () => _move(plan, i, i - 1) : null,
               moveDown: editable && i + 1 < plan.stops.length
@@ -309,6 +343,22 @@ class _SavedTripDetailsState extends State<SavedTripDetails> {
             controller: _stop,
             enabled: editable,
           ),
+          if (services != null)
+            WayhunterButton.secondary(
+              label: 'Pick location on map',
+              onPressed: editable ? () => _pickStopLocation(services) : null,
+            ),
+          if (_stopLocation case final point?)
+            ListTile(
+              title: Text(locationCoordinates(point)),
+              trailing: IconButton(
+                tooltip: 'Clear selected location',
+                onPressed: editable
+                    ? () => setState(() => _stopLocation = null)
+                    : null,
+                icon: const Icon(Icons.close),
+              ),
+            ),
           WayhunterButton.secondary(
             label: 'Add stop',
             onPressed: editable ? () => _add(plan) : null,
