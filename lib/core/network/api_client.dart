@@ -58,15 +58,18 @@ class ApiClient {
     required HttpTransport transport,
     required AccessTokenSource tokens,
     Duration timeout = const Duration(seconds: 15),
+    void Function() Function()? captureUnauthorizedHandler,
   }) : _baseUrl = validatedBaseUrl(baseUrl),
        _transport = transport,
        _tokens = tokens,
-       _timeout = timeout;
+       _timeout = timeout,
+       _captureUnauthorizedHandler = captureUnauthorizedHandler;
 
   final Uri? _baseUrl;
   final HttpTransport _transport;
   final AccessTokenSource _tokens;
   final Duration _timeout;
+  final void Function() Function()? _captureUnauthorizedHandler;
 
   /// Feature adapters supply exact path segments and decode the returned JSON.
   /// A null result represents an empty response or a JSON null.
@@ -102,10 +105,12 @@ class ApiClient {
     if (body != null) {
       headers['Content-Type'] = 'application/json; charset=utf-8';
     }
+    void Function()? onUnauthorized;
     if (requiresSession) {
       final token = _tokens.accessToken;
       if (token == null) throw const ApiException(ApiError.unauthorized);
       headers['Authorization'] = 'Bearer $token';
+      onUnauthorized = _captureUnauthorizedHandler?.call();
     }
 
     final TransportResponse response;
@@ -120,6 +125,7 @@ class ApiClient {
     }
 
     final status = response.statusCode;
+    if (status == 401) onUnauthorized?.call();
     if (status < 200 || status >= 300) {
       final kind = switch (status) {
         401 => ApiError.unauthorized,

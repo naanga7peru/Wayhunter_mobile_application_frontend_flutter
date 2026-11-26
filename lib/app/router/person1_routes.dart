@@ -44,7 +44,11 @@ Map<String, RouteRegistration<Object?>> person1Routes(
   TripSessionsApi lifecycle(FoundationServices services) {
     final current = sessions;
     if (current != null && current.belongsTo(services.session)) return current;
-    return sessions = TripSessionsApi(services.api, services.session);
+    return sessions = TripSessionsApi(
+      services.api,
+      services.session,
+      recoveryStore: services.tripRecovery,
+    );
   }
 
   HomeAdvertisementsApi? homeAdvertisements;

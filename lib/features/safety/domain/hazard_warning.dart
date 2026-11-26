@@ -48,6 +48,10 @@ class HazardWarning {
   final DateTime? verifiedAtUtc;
   final DateTime? resolvedAtUtc;
 
+  bool isActiveAt(DateTime now) =>
+      (status == HazardStatus.reported || status == HazardStatus.verified) &&
+      expiresAtUtc.isAfter(now);
+
   factory HazardWarning.fromJson(Object? value) {
     if (value is! Map<String, Object?>) {
       throw const ApiException(ApiError.invalidResponse);

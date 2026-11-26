@@ -96,6 +96,7 @@ class _Harness {
     baseUrl: Uri.https('example.invalid'),
     transport: transport,
     tokens: session,
+    captureUnauthorizedHandler: session.captureUnauthorizedHandler,
   );
 
   Widget app({bool configured = true}) => FoundationServices(
@@ -127,6 +128,66 @@ Future<void> _login(WidgetTester tester, String email) async {
 }
 
 void main() {
+  testWidgets(
+    'protected 401 ends the current session while 403 leaves the shell',
+    (tester) async {
+      final harness = _Harness(saved: true);
+      var status = 403;
+      harness.transport.respond = (request) {
+        if (request.uri.path == '/api/mobile/identity/me') {
+          return _json(200, {'userId': _first});
+        }
+        expect(request.headers['Authorization'], 'Bearer $_savedToken');
+        return TransportResponse(status, const []);
+      };
+      await tester.pumpWidget(harness.app());
+      await tester.pumpAndSettle();
+      Future<Object?> read() => harness.api.request(ApiMethod.get, [
+        'api',
+        'mobile',
+        'notifications',
+      ], requiresSession: true);
+      await expectLater(read(), throwsA(isA<ApiException>()));
+      await tester.pumpAndSettle();
+      expect(_shell, findsOneWidget);
+      status = 401;
+      await expectLater(read(), throwsA(isA<ApiException>()));
+      await tester.pumpAndSettle();
+      expect(_shell, findsNothing);
+      expect(_signIn, findsOneWidget);
+      expect(find.text('Your session ended. Sign in again.'), findsOneWidget);
+      expect(harness.store.value, isNull);
+    },
+  );
+
+  test(
+    'a delayed protected 401 cannot mark a replacement session rejected',
+    () async {
+      final harness = _Harness(saved: true);
+      await harness.session.restore();
+      final pending = Completer<TransportResponse>();
+      harness.transport.respond = (_) => pending.future;
+      final response = expectLater(
+        harness.api.request(ApiMethod.get, [
+          'api',
+          'mobile',
+          'notifications',
+        ], requiresSession: true),
+        throwsA(isA<ApiException>()),
+      );
+      await harness.session.authenticate(
+        const SessionCredential(
+          user: UserRef(_second),
+          accessToken: _savedToken,
+        ),
+      );
+      pending.complete(const TransportResponse(401, []));
+      await response;
+      expect(harness.session.currentSessionRejected, isFalse);
+      expect(harness.session.state.user?.id, _second);
+    },
+  );
+
   testWidgets('fresh installation restores once and opens Sign In', (
     tester,
   ) async {

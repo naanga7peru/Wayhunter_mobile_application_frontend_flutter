@@ -166,7 +166,7 @@ class TripMemoryCreateScreen extends StatefulWidget {
 class _TripMemoryCreateScreenState extends State<TripMemoryCreateScreen> {
   final _formKey = GlobalKey<FormState>();
   final _caption = TextEditingController();
-  String? _operationId;
+  ({String id, String caption})? _pendingSave;
   ApiException? _error;
   bool _busy = false;
 
@@ -178,22 +178,31 @@ class _TripMemoryCreateScreenState extends State<TripMemoryCreateScreen> {
 
   Future<void> _save() async {
     if (_busy || !_formKey.currentState!.validate()) return;
+    final retrying = _pendingSave != null;
     setState(() {
       _busy = true;
       _error = null;
-      _operationId ??= _newOperationId();
+      _pendingSave ??= (id: _newOperationId(), caption: _caption.text.trim());
     });
+    final pending = _pendingSave!;
     try {
       await widget.api.create(
         widget.plan.id,
-        operationId: _operationId!,
-        caption: _caption.text.trim(),
+        operationId: pending.id,
+        caption: pending.caption,
       );
-      if (mounted) {
+      if (mounted && ModalRoute.of(context)?.isCurrent == true) {
         Navigator.of(context).pop(true);
       }
     } on ApiException catch (error) {
-      if (mounted) setState(() => _error = error);
+      if (mounted) {
+        setState(() {
+          _error = error;
+          if (!retrying && error.kind == ApiError.rejected) {
+            _pendingSave = null;
+          }
+        });
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -207,6 +216,7 @@ class _TripMemoryCreateScreenState extends State<TripMemoryCreateScreen> {
         key: _formKey,
         child: TextFormField(
           controller: _caption,
+          readOnly: _pendingSave != null,
           maxLength: 1000,
           maxLines: 5,
           decoration: const InputDecoration(
@@ -227,7 +237,9 @@ class _TripMemoryCreateScreenState extends State<TripMemoryCreateScreen> {
       if (_error case final error?)
         WayhunterErrorView(
           title: 'Memory was not confirmed',
-          message: _memoryError(error),
+          message: _pendingSave == null
+              ? _memoryError(error)
+              : '${_memoryError(error)} Retrying sends the same note and operation.',
           onRetry: _save,
         ),
       WayhunterButton.primary(

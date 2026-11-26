@@ -29,12 +29,30 @@ class SessionController extends ChangeNotifier implements AccessTokenSource {
   final CredentialStore _store;
   SessionState _state = const SessionState._(SessionStatus.signedOut);
   SessionCredential? _credential;
+  SessionState? _rejectedState;
   Future<void> _pending = Future<void>.value();
   Future<void>? _restoration;
   int _generation = 0;
   bool _canRestore = true;
 
   SessionState get state => _state;
+  bool get currentSessionRejected => identical(_rejectedState, _state);
+
+  /// Captures the identity of the request's session, even if a later sign-in
+  /// receives the same token string.
+  void Function() captureUnauthorizedHandler() {
+    final requestState = _state;
+    final generation = _generation;
+    return () {
+      if (generation == _generation &&
+          identical(requestState, _state) &&
+          _state.status == SessionStatus.authenticated &&
+          !currentSessionRejected) {
+        _rejectedState = requestState;
+        notifyListeners();
+      }
+    };
+  }
 
   @override
   String? get accessToken => _credential?.accessToken;
@@ -138,6 +156,7 @@ class SessionController extends ChangeNotifier implements AccessTokenSource {
 
   void _setState(SessionStatus status, [UserRef? user]) {
     _state = SessionState._(status, user);
+    _rejectedState = null;
     notifyListeners();
   }
 

@@ -50,6 +50,8 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
   String? _tripName;
   String? _notice;
   ApiException? _error;
+  DateTime? _safeAt;
+  String? _checkInError;
   bool _busy = false;
 
   @override
@@ -134,6 +136,37 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     }
   }
 
+  Future<void> _checkIn(TripSession session) async {
+    if (_busy || _safeAt != null) return;
+    setState(() {
+      _busy = true;
+      _checkInError = null;
+    });
+    try {
+      final time = await widget.sessions.checkIn(session);
+      if (mounted) setState(() => _safeAt = time);
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      if (error.kind == ApiError.unauthorized ||
+          error.kind == ApiError.forbidden) {
+        _showError(error);
+      } else {
+        setState(
+          () => _checkInError = switch (error.kind) {
+            ApiError.conflict || ApiError.notFound =>
+              'This session cannot accept a check-in. Recover the current trip status.',
+            ApiError.unavailable || ApiError.server =>
+              'Safe Check-in is unavailable. Try again when the service is back online.',
+            _ =>
+              'Check-in could not be confirmed. You can retry for this session.',
+          },
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final session = _session;
@@ -192,6 +225,15 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
             onPressed: () => Navigator.of(context).pop(),
           )
         else ...[
+          if (_safeAt case final safeAt?)
+            Text('Safe check-in recorded at ${safeAt.toLocal()}')
+          else
+            WayhunterButton.secondary(
+              label: 'I’m Safe',
+              onPressed: _busy ? null : () => _checkIn(session),
+            ),
+          if (_checkInError case final message?)
+            Semantics(liveRegion: true, child: Text(message)),
           WayhunterButton.secondary(
             label: 'Trip safety',
             onPressed: () => Navigator.of(context).pushNamed<void>(
