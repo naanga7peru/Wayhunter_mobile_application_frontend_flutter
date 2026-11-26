@@ -7,6 +7,7 @@ import 'package:wayhunter_mobile/app/bootstrap/foundation_services.dart';
 import 'package:wayhunter_mobile/app/wayhunter_app.dart';
 import 'package:wayhunter_mobile/core/auth/session_controller.dart';
 import 'package:wayhunter_mobile/core/network/api_client.dart';
+import 'package:wayhunter_mobile/core/network/api_http_client.dart';
 import 'package:wayhunter_mobile/core/network/package_http_transport.dart';
 import 'package:wayhunter_mobile/core/services/android_location_services.dart';
 import 'package:wayhunter_mobile/core/services/android_map_provider.dart';
@@ -18,11 +19,10 @@ import 'package:wayhunter_mobile/features/traveller/active_trip/data/trip_recove
 class AppConfig {
   const AppConfig({this.environmentLabel = 'development', this.apiBaseUrl});
 
+  static const _configuredEnvironment = String.fromEnvironment('WAYHUNTER_ENV');
+
   factory AppConfig.fromEnvironment() {
-    const label = String.fromEnvironment(
-      'WAYHUNTER_ENV',
-      defaultValue: 'development',
-    );
+    const label = _configuredEnvironment;
     const apiUrl = String.fromEnvironment('WAYHUNTER_API_BASE_URL');
     return AppConfig(
       environmentLabel: switch (label) {
@@ -56,7 +56,14 @@ class _FoundationRootState extends State<_FoundationRoot> {
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android
       ? const AndroidLocationServices()
       : null;
-  late final http.Client _http = http.Client();
+  late final http.Client _http = createApiHttpClient(
+    isDebug: kDebugMode,
+    environment: AppConfig._configuredEnvironment,
+    apiBaseUrl: widget.config.apiBaseUrl,
+    certificateDerBase64: kDebugMode
+        ? const String.fromEnvironment('WAYHUNTER_LOCAL_HTTPS_CERT_DER_BASE64')
+        : '',
+  );
   late final String? _storageNamespace =
       _locationServices != null && widget.config.apiBaseUrl != null
       ? base64Url.encode(
