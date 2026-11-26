@@ -1,22 +1,26 @@
 import 'package:wayhunter_mobile/core/auth/session_controller.dart';
 import 'package:wayhunter_mobile/core/network/api_client.dart';
 import 'package:wayhunter_mobile/features/traveller/planning/domain/trip_plan.dart';
+import 'package:wayhunter_mobile/features/traveller/planning/domain/trip_route_preview.dart';
 
 class TripPlansApi {
   TripPlansApi(this._api, this._session)
     : _token = _session.accessToken,
-      _owner = _session.state.user?.id;
+      _owner = _session.state.user?.id,
+      _state = _session.state;
 
   final ApiClient _api;
   final SessionController _session;
   final String? _token;
   final String? _owner;
+  final SessionState _state;
 
   static const _base = ['api', 'mobile', 'trip-plans'];
 
   void _checkOwner() {
     if (_token == null ||
         _owner == null ||
+        !identical(_state, _session.state) ||
         _session.accessToken != _token ||
         _session.state.user?.id != _owner) {
       throw const ApiException(ApiError.unauthorized);
@@ -28,17 +32,21 @@ class TripPlansApi {
     List<String> path, {
     Object? body,
     String? ifMatch,
+    int? expectedSuccessStatus,
   }) async {
     _checkOwner();
-    final response = await _api.request(
-      method,
-      [..._base, ...path],
-      requiresSession: true,
-      jsonBody: body,
-      ifMatch: ifMatch,
-    );
-    _checkOwner();
-    return response;
+    try {
+      return await _api.request(
+        method,
+        [..._base, ...path],
+        requiresSession: true,
+        jsonBody: body,
+        ifMatch: ifMatch,
+        expectedSuccessStatus: expectedSuccessStatus,
+      );
+    } finally {
+      _checkOwner();
+    }
   }
 
   static String _id(String id) {
@@ -64,6 +72,28 @@ class TripPlansApi {
 
   Future<TripPlan> get(String id) async =>
       _decode(await _request(ApiMethod.get, [_id(id)]), id);
+
+  Future<TripRoutePreview> previewRoute(TripPlan plan) async {
+    if (!TripRoutePreview.supportsStops(plan.stops)) {
+      throw const ApiException(ApiError.rejected);
+    }
+    // Server plans carry orderIndex. Keep the sequence even if the plan
+    // was assembled by a caller instead of decoded from a saved response.
+    final orderedStops = [...plan.stops]
+      ..sort((first, second) => first.order.compareTo(second.order));
+    final result = await _request(
+      ApiMethod.post,
+      ['routes', 'preview'],
+      body: {
+        'orderedStops': [
+          for (final stop in orderedStops)
+            {'latitude': stop.latitude!, 'longitude': stop.longitude!},
+        ],
+      },
+      expectedSuccessStatus: 200,
+    );
+    return TripRoutePreview.fromJson(result);
+  }
 
   Future<TripPlan> create(
     TripInformation info,

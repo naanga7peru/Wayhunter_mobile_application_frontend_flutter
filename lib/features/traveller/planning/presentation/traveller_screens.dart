@@ -17,6 +17,7 @@ import 'package:wayhunter_mobile/features/traveller/planning/data/trip_plans_api
 import 'package:wayhunter_mobile/features/traveller/planning/domain/trip_plan.dart';
 import 'package:wayhunter_mobile/features/traveller/planning/presentation/trip_editor.dart';
 import 'package:wayhunter_mobile/features/traveller/planning/presentation/trip_plan_widgets.dart';
+import 'package:wayhunter_mobile/features/traveller/planning/presentation/trip_route_review.dart';
 import 'package:wayhunter_mobile/features/traveller/planning/presentation/traveller_location_picker.dart';
 import 'package:wayhunter_mobile/shared/domain/models/navigation_refs.dart';
 
@@ -189,6 +190,17 @@ class _SavedTripDetailsState extends State<SavedTripDetails> {
       ),
     );
     if (mounted) _load();
+  }
+
+  void _reviewRoute(TripPlan plan) {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => WayhunterPageScaffold(
+          appBar: AppBar(),
+          body: TripRouteReview(plan: plan, api: widget.api),
+        ),
+      ),
+    );
   }
 
   void _add(TripPlan plan) {
@@ -411,6 +423,10 @@ class _SavedTripDetailsState extends State<SavedTripDetails> {
           WayhunterButton.secondary(
             label: 'Add stop',
             onPressed: editable ? () => _add(plan) : null,
+          ),
+          WayhunterButton.secondary(
+            label: 'Review route',
+            onPressed: editable ? () => _reviewRoute(plan) : null,
           ),
           if (_busy) const WayhunterLoadingView(label: 'Updating trip'),
           if (_error case final message?)

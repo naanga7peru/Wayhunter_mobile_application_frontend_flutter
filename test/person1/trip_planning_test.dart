@@ -26,6 +26,18 @@ const _owner = '10000000-0000-0000-0000-000000000004';
 const _version = 'AAAAAAAAAAE=';
 const _nextVersion = 'AAAAAAAAAAI=';
 const _base = '/api/mobile/trip-plans';
+const _previewPath = '$_base/routes/preview';
+const _routePreview = {
+  'routeGeometry': [
+    {'latitude': 7.5, 'longitude': 80},
+    {'latitude': 8, 'longitude': 81.5},
+  ],
+  'distanceKm': 42.5,
+  'estimatedDurationMinutes': 52,
+  'providerName': 'GoogleRoutes',
+  'encodedPolyline': null,
+  'trafficAware': false,
+};
 
 Map<String, Object?> _stop(String id, String name, int index) => {
   'stopId': id,
@@ -51,6 +63,11 @@ Map<String, Object?> _plan({
   'rowVersion': version,
   'stops': stops,
 };
+
+List<Map<String, Object?>> _pinnedStops() => [
+  {..._stop(_stopB, 'End', 1), 'latitude': 8, 'longitude': 81.5},
+  {..._stop(_stopA, 'Start', 0), 'latitude': 7.5, 'longitude': 80},
+];
 
 TransportResponse _json(int status, Object data) =>
     TransportResponse(status, utf8.encode(jsonEncode(data)));
@@ -134,6 +151,19 @@ Future<void> tap(WidgetTester tester, Finder finder) async {
   await tester.ensureVisible(finder);
   await tester.tap(finder);
   await tester.pumpAndSettle();
+}
+
+Future<void> openRouteReview(WidgetTester tester) async {
+  final review = find.text('Review route');
+  await tester.scrollUntilVisible(
+    review,
+    150,
+    scrollable: find.byWidgetPredicate(
+      (widget) =>
+          widget is Scrollable && widget.axisDirection == AxisDirection.down,
+    ),
+  );
+  await tap(tester, review);
 }
 
 Future<void> enter(WidgetTester tester, int index, String value) async {
@@ -263,6 +293,157 @@ void main() {
   final openPicker = find.text('Pick on map');
   final confirm = find.widgetWithText(FilledButton, 'Confirm location');
   final useGps = find.text('Use current location');
+
+  testWidgets(
+    'saved Route Review sends ordered pins and retries provider errors',
+    (tester) async {
+      final h = _Harness();
+      var previews = 0;
+      h.mock((request) {
+        if (request.uri.path == _base) return _json(200, [_plan()]);
+        if (request.uri.path == '$_base/$_id') {
+          return _json(200, _plan(stops: _pinnedStops()));
+        }
+        expect(request.method, ApiMethod.post);
+        expect(request.uri.path, _previewPath);
+        expect(body(request), {'orderedStops': _routePreview['routeGeometry']});
+        return ++previews == 1
+            ? const TransportResponse(503, [])
+            : _json(200, _routePreview);
+      });
+      await h.open(tester);
+      await tap(tester, find.text('My Plans'));
+      await tap(tester, find.text('Synthetic trip'));
+      expect(previews, 0);
+      await openRouteReview(tester);
+      expect(find.text('Route estimate unavailable'), findsOneWidget);
+      expect(find.textContaining('Distance'), findsNothing);
+      await tap(tester, find.text('Retry'));
+      expect(find.textContaining('42.5 km'), findsOneWidget);
+      expect(find.textContaining('52.0 min'), findsOneWidget);
+      expect(find.text('1. Start'), findsOneWidget);
+      expect(find.text('2. End'), findsOneWidget);
+      expect(find.text('Estimate excludes live traffic.'), findsOneWidget);
+      expect(previews, 2);
+    },
+  );
+
+  testWidgets(
+    'Route Review skips unpinned plans and surfaces the provider quota',
+    (tester) async {
+      final h = _Harness();
+      var pins = false;
+      var previews = 0;
+      h.mock((request) {
+        if (request.uri.path == _base) return _json(200, [_plan()]);
+        if (request.uri.path == '$_base/$_id') {
+          return _json(
+            200,
+            _plan(
+              stops: pins
+                  ? _pinnedStops()
+                  : [_stop(_stopA, 'Start', 0), _pinnedStops().first],
+            ),
+          );
+        }
+        expect(request.uri.path, _previewPath);
+        previews++;
+        return const TransportResponse(429, []);
+      });
+      await h.open(tester);
+      await tap(tester, find.text('My Plans'));
+      await tap(tester, find.text('Synthetic trip'));
+      await openRouteReview(tester);
+      expect(
+        find.text('Route estimate needs saved map locations'),
+        findsOneWidget,
+      );
+      expect(previews, 0);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      pins = true;
+      await tap(tester, find.text('Synthetic trip'));
+      await openRouteReview(tester);
+      expect(find.text('Daily route preview limit reached'), findsOneWidget);
+      expect(find.text('Retry'), findsNothing);
+      expect(previews, 1);
+    },
+  );
+
+  test(
+    'Route preview rejects invalid request and malformed provider geometry',
+    () async {
+      final h = _Harness();
+      addTearDown(h.session.dispose);
+      await h.session.authenticate(h.credential);
+      final api = h.api;
+      final valid = TripPlan.fromJson(_plan(stops: _pinnedStops()));
+      final tooMany = TripPlan(
+        id: valid.id,
+        information: valid.information,
+        stops: List.filled(28, valid.stops.first),
+        rowVersion: valid.rowVersion,
+      );
+      await expectLater(
+        api.previewRoute(tooMany),
+        throwsA(
+          isA<ApiException>().having((e) => e.kind, 'kind', ApiError.rejected),
+        ),
+      );
+      expect(h.transport.requests, isEmpty);
+      for (final response in [
+        _json(200, {
+          ..._routePreview,
+          'routeGeometry': [
+            {'latitude': 7, 'longitude': 80},
+            {'latitude': 92, 'longitude': 81},
+          ],
+        }),
+        _json(200, {..._routePreview, 'estimatedDurationMinutes': -1}),
+        _json(201, _routePreview),
+      ]) {
+        h.mock((_) => response);
+        await expectLater(
+          api.previewRoute(valid),
+          throwsA(
+            isA<ApiException>().having(
+              (e) => e.kind,
+              'kind',
+              ApiError.invalidResponse,
+            ),
+          ),
+        );
+      }
+    },
+  );
+
+  test(
+    'Route preview cannot return a delayed response into a replacement session',
+    () async {
+      final h = _Harness();
+      addTearDown(h.session.dispose);
+      await h.session.authenticate(h.credential);
+      final pending = Completer<TransportResponse>();
+      h.mock((_) => pending.future);
+      final plan = TripPlan.fromJson(_plan(stops: _pinnedStops()));
+      final result = expectLater(
+        h.api.previewRoute(plan),
+        throwsA(
+          isA<ApiException>().having(
+            (e) => e.kind,
+            'kind',
+            ApiError.unauthorized,
+          ),
+        ),
+      );
+      await h.session.authenticate(h.credential);
+      pending.complete(_json(200, _routePreview));
+      await result;
+      expect(h.transport.requests, hasLength(1));
+    },
+  );
 
   testWidgets(
     'confirmed pin survives draft navigation and reopens from the server',
