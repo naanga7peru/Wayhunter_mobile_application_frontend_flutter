@@ -309,6 +309,29 @@ void main() {
       await tester.pumpAndSettle();
     }
   });
+
+  testWidgets(
+    'Refresh attempts reads current progress without sending a Game mutation',
+    (tester) async {
+      var reads = 0;
+      final transport = _GamesTransport()
+        ..respond = (request) async {
+          expect(request.method, ApiMethod.get);
+          expect(request.uri.path, '/api/mobile/games/me/attempts');
+          expect(request.body, isNull);
+          return _response([
+            {..._attempt, 'status': ++reads == 1 ? 2 : 3},
+          ]);
+        };
+      await _openAuthenticatedGameZone(tester, transport);
+      await _tap(tester, 'My Game Attempts');
+      expect(find.text('Waiting for verification'), findsOneWidget);
+      await _tap(tester, 'Refresh attempts');
+      expect(find.text('Completed'), findsOneWidget);
+      expect(find.text('Waiting for verification'), findsNothing);
+      expect(reads, 2);
+    },
+  );
 }
 
 Future<void> _openGameZone(WidgetTester tester) async {

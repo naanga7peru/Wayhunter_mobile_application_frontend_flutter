@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:wayhunter_mobile/core/auth/session_controller.dart';
 import 'package:wayhunter_mobile/core/network/api_client.dart';
 import 'package:wayhunter_mobile/core/services/device_interfaces.dart';
+import 'package:wayhunter_mobile/features/traveller/active_trip/data/trip_recovery_store.dart';
 
 class FoundationServices extends InheritedWidget {
   const FoundationServices({
@@ -13,6 +14,7 @@ class FoundationServices extends InheritedWidget {
     this.maps = const UnavailableDeviceServices(),
     this.capture = const UnavailableDeviceServices(),
     this.uploads = const UnavailableDeviceServices(),
+    this.tripRecovery,
     required super.child,
   });
 
@@ -23,6 +25,7 @@ class FoundationServices extends InheritedWidget {
   final MapProvider maps;
   final LiveMediaCapture capture;
   final MediaUploadMonitor uploads;
+  final TripRecoveryStore? tripRecovery;
 
   static FoundationServices of(BuildContext context) {
     final services = context
@@ -41,5 +44,6 @@ class FoundationServices extends InheritedWidget {
       location != oldWidget.location ||
       maps != oldWidget.maps ||
       capture != oldWidget.capture ||
-      uploads != oldWidget.uploads;
+      uploads != oldWidget.uploads ||
+      tripRecovery != oldWidget.tripRecovery;
 }

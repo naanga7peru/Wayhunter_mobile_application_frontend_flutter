@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:wayhunter_mobile/core/network/api_client.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_controls.dart';
@@ -43,6 +45,7 @@ class TripSafetyScreen extends StatefulWidget {
 class _TripSafetyScreenState extends State<TripSafetyScreen> {
   late Future<List<HazardWarning>> _warnings;
   Object? _loadError;
+  Timer? _expiryTimer;
 
   @override
   void initState() {
@@ -51,13 +54,39 @@ class _TripSafetyScreenState extends State<TripSafetyScreen> {
   }
 
   Future<List<HazardWarning>> _load() async {
+    _expiryTimer?.cancel();
     try {
       _loadError = null;
-      return await widget.api.listForTrip(widget.plan.id);
+      final warnings = await widget.api.listForTrip(widget.plan.id);
+      if (mounted) _scheduleExpiry(warnings);
+      return warnings;
     } catch (error) {
       _loadError = error;
       return const [];
     }
+  }
+
+  void _scheduleExpiry(List<HazardWarning> warnings) {
+    final now = DateTime.now();
+    DateTime? next;
+    for (final warning in warnings) {
+      if (warning.isActiveAt(now) &&
+          (next == null || warning.expiresAtUtc.isBefore(next))) {
+        next = warning.expiresAtUtc;
+      }
+    }
+    if (next == null) return;
+    _expiryTimer = Timer(next.difference(now), () {
+      if (!mounted) return;
+      setState(() {});
+      _scheduleExpiry(warnings);
+    });
+  }
+
+  @override
+  void dispose() {
+    _expiryTimer?.cancel();
+    super.dispose();
   }
 
   void _retry() => setState(() => _warnings = _load());
@@ -85,7 +114,10 @@ class _TripSafetyScreenState extends State<TripSafetyScreen> {
               onRetry: _retry,
             );
           }
-          final warnings = snapshot.requireData;
+          final now = DateTime.now();
+          final warnings = snapshot.requireData
+              .where((warning) => warning.isActiveAt(now))
+              .toList(growable: false);
           if (warnings.isEmpty) {
             return WayhunterUnavailableView(
               title: 'Route warnings cannot be confirmed',

@@ -13,6 +13,7 @@ import 'package:wayhunter_mobile/core/services/android_map_provider.dart';
 import 'package:wayhunter_mobile/core/services/device_interfaces.dart';
 import 'package:wayhunter_mobile/core/storage/android_credential_store.dart';
 import 'package:wayhunter_mobile/core/storage/credential_store.dart';
+import 'package:wayhunter_mobile/features/traveller/active_trip/data/trip_recovery_store.dart';
 
 class AppConfig {
   const AppConfig({this.environmentLabel = 'development', this.apiBaseUrl});
@@ -56,24 +57,30 @@ class _FoundationRootState extends State<_FoundationRoot> {
       ? const AndroidLocationServices()
       : null;
   late final http.Client _http = http.Client();
+  late final String? _storageNamespace =
+      _locationServices != null && widget.config.apiBaseUrl != null
+      ? base64Url.encode(
+          utf8.encode(
+            '${widget.config.environmentLabel}|${widget.config.apiBaseUrl}',
+          ),
+        )
+      : null;
+  late final TripRecoveryStore? _tripRecovery = _storageNamespace == null
+      ? null
+      : SecureTripRecoveryStore(_storageNamespace);
   late final SessionController _session = SessionController(_credentialStore());
   late final ApiClient _api = ApiClient(
     baseUrl: widget.config.apiBaseUrl,
     transport: PackageHttpTransport(_http),
     tokens: _session,
+    captureUnauthorizedHandler: _session.captureUnauthorizedHandler,
   );
 
   CredentialStore _credentialStore() {
-    final baseUrl = widget.config.apiBaseUrl;
-    if (kIsWeb ||
-        defaultTargetPlatform != TargetPlatform.android ||
-        baseUrl == null) {
-      return const UnavailableCredentialStore();
-    }
-    final namespace = base64Url.encode(
-      utf8.encode('${widget.config.environmentLabel}|$baseUrl'),
-    );
-    return AndroidCredentialStore(namespace: namespace);
+    final namespace = _storageNamespace;
+    return namespace == null
+        ? const UnavailableCredentialStore()
+        : AndroidCredentialStore(namespace: namespace);
   }
 
   @override
@@ -83,6 +90,7 @@ class _FoundationRootState extends State<_FoundationRoot> {
     permissions: _locationServices ?? const UnavailableDeviceServices(),
     location: _locationServices ?? const UnavailableDeviceServices(),
     maps: const AndroidMapProvider(),
+    tripRecovery: _tripRecovery,
     child: WayhunterApp.authenticated(
       environmentLabel: widget.config.environmentLabel,
       apiConfigured: widget.config.apiBaseUrl != null,

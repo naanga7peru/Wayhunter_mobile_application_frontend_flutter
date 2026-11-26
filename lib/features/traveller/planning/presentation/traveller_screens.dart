@@ -12,6 +12,7 @@ import 'package:wayhunter_mobile/features/traveller/active_trip/data/trip_sessio
 import 'package:wayhunter_mobile/features/traveller/active_trip/domain/trip_session.dart';
 import 'package:wayhunter_mobile/features/traveller/active_trip/presentation/active_trip_screen.dart';
 import 'package:wayhunter_mobile/features/friends/presentation/friends_screen.dart';
+import 'package:wayhunter_mobile/features/safety/presentation/safety_screens.dart';
 import 'package:wayhunter_mobile/features/traveller/planning/data/trip_plans_api.dart';
 import 'package:wayhunter_mobile/features/traveller/planning/domain/trip_plan.dart';
 import 'package:wayhunter_mobile/features/traveller/planning/presentation/trip_editor.dart';
@@ -112,12 +113,24 @@ class SavedTripDetails extends StatefulWidget {
 class _SavedTripDetailsState extends State<SavedTripDetails> {
   final _stop = TextEditingController();
   LatLng? _stopLocation;
-  late Future<TripPlan> _plan = widget.api.get(widget.reference.id);
+  late Future<TripPlan> _plan = _loadPlan();
   String? _error;
   bool _busy = false;
   bool _reloadRequired = false;
   bool _accessLost = false;
   String? _startError;
+  bool _recoveryUnavailable = false;
+
+  Future<TripPlan> _loadPlan() async {
+    final plan = await widget.api.get(widget.reference.id);
+    try {
+      await widget.sessions.loadRecovery(widget.reference);
+      _recoveryUnavailable = false;
+    } on ApiException {
+      _recoveryUnavailable = true;
+    }
+    return plan;
+  }
 
   @override
   void dispose() {
@@ -129,7 +142,7 @@ class _SavedTripDetailsState extends State<SavedTripDetails> {
     _error = null;
     _reloadRequired = false;
     _accessLost = false;
-    _plan = widget.api.get(widget.reference.id);
+    _plan = _loadPlan();
   });
 
   Future<void> _mutate(Future<TripPlan?> Function() operation) async {
@@ -244,11 +257,9 @@ class _SavedTripDetailsState extends State<SavedTripDetails> {
       _busy = true;
       _startError = null;
     });
-    TripSession? session;
+    ActiveTripArgs? reference;
     try {
-      session =
-          widget.sessions.known(widget.reference) ??
-          await widget.sessions.start(widget.reference);
+      reference = await widget.sessions.open(widget.reference);
     } on ApiException catch (error) {
       if (mounted) {
         setState(() {
@@ -264,9 +275,21 @@ class _SavedTripDetailsState extends State<SavedTripDetails> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
-    if (session == null || !mounted) return;
-    await AppDestination.activeTrip(session.reference).open(context);
+    if (reference == null || !mounted) return;
+    await AppDestination.activeTrip(reference).open(context);
     if (mounted) setState(() {});
+  }
+
+  Future<void> _recoverWithId() async {
+    final id = await showDialog<String>(
+      context: context,
+      builder: (_) => const _TripSessionIdDialog(),
+    );
+    if (!mounted || id == null) return;
+    await AppDestination.activeTrip(
+      ActiveTripArgs(plan: widget.reference, session: TripSessionRef(id)),
+    ).open(context);
+    if (mounted) setState(() => _startError = null);
   }
 
   Widget _trip(TripPlan plan) {
@@ -274,6 +297,9 @@ class _SavedTripDetailsState extends State<SavedTripDetails> {
         .dependOnInheritedWidgetOfExactType<FoundationServices>();
     final knownSession = widget.sessions.known(widget.reference);
     final startBlocked = widget.sessions.startNeedsVerification(
+      widget.reference,
+    );
+    final finishPending = widget.sessions.finishNeedsVerification(
       widget.reference,
     );
     final editable = !_busy && !_reloadRequired;
@@ -284,18 +310,32 @@ class _SavedTripDetailsState extends State<SavedTripDetails> {
         children: [
           WayhunterSurfaceCard(child: TripSummary(info: plan.information)),
           WayhunterButton.primary(
-            label: switch (knownSession?.status) {
-              null => 'Start trip',
-              TripSessionStatus.finished => 'View completed trip',
-              _ => 'Open trip session',
-            },
-            onPressed: editable && !startBlocked ? _openSession : null,
+            label: finishPending
+                ? 'Recover trip session'
+                : switch (knownSession?.status) {
+                    null => 'Start trip',
+                    TripSessionStatus.finished => 'View completed trip',
+                    _ => 'Open trip session',
+                  },
+            onPressed: editable && !startBlocked && !_recoveryUnavailable
+                ? _openSession
+                : null,
           ),
+          if (_recoveryUnavailable)
+            WayhunterButton.secondary(
+              label: 'Retry trip recovery storage',
+              onPressed: editable ? _load : null,
+            ),
           if (_startError case final message?)
             Semantics(liveRegion: true, child: Text(message))
           else if (startBlocked)
             const Text(
               'Start could not be confirmed. Recovery requires a session ID.',
+            ),
+          if (startBlocked)
+            WayhunterButton.secondary(
+              label: 'Recover with session ID',
+              onPressed: editable ? _recoverWithId : null,
             ),
           Wrap(
             spacing: 12,
@@ -313,6 +353,15 @@ class _SavedTripDetailsState extends State<SavedTripDetails> {
                     ? () => Navigator.of(context).pushNamed<void>(
                         tripFriendsRoute,
                         arguments: TripPlanRef(plan.id),
+                      )
+                    : null,
+              ),
+              WayhunterButton.secondary(
+                label: 'Trip safety',
+                onPressed: editable
+                    ? () => Navigator.of(context).pushNamed<void>(
+                        tripSafetyRoute,
+                        arguments: widget.reference,
                       )
                     : null,
               ),
@@ -388,4 +437,38 @@ class _SavedTripDetailsState extends State<SavedTripDetails> {
           onRetry: _load,
         )
       : TripRead(future: _plan, onRetry: _load, content: _trip);
+}
+
+class _TripSessionIdDialog extends StatefulWidget {
+  const _TripSessionIdDialog();
+
+  @override
+  State<_TripSessionIdDialog> createState() => _TripSessionIdDialogState();
+}
+
+class _TripSessionIdDialogState extends State<_TripSessionIdDialog> {
+  String _id = '';
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Recover trip session'),
+    content: TextField(
+      decoration: const InputDecoration(
+        labelText: 'Server-confirmed session ID',
+      ),
+      onChanged: (value) => setState(() => _id = value.trim()),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.of(context).pop(),
+        child: const Text('Cancel'),
+      ),
+      TextButton(
+        onPressed: isTripPlanId(_id)
+            ? () => Navigator.of(context).pop(_id)
+            : null,
+        child: const Text('Check session'),
+      ),
+    ],
+  );
 }

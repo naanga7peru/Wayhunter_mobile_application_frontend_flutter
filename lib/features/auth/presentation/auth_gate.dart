@@ -40,6 +40,7 @@ class _AuthGateState extends State<AuthGate> {
   int _attempt = 0;
   String? _verifiedToken;
   bool _revocationFailed = false;
+  bool _sessionExpired = false;
 
   @override
   void initState() {
@@ -57,8 +58,10 @@ class _AuthGateState extends State<AuthGate> {
   bool _isCurrent(int attempt) => mounted && _attempt == attempt;
 
   void _sessionChanged() {
-    if (_phase == _Phase.authenticated &&
-        widget.session.accessToken != _verifiedToken) {
+    if (_phase != _Phase.authenticated) return;
+    if (widget.session.currentSessionRejected) {
+      _clearSession(expired: true);
+    } else if (widget.session.accessToken != _verifiedToken) {
       setState(() {
         _verifiedToken = null;
         _phase = _Phase.signedOut;
@@ -105,7 +108,7 @@ class _AuthGateState extends State<AuthGate> {
         setState(() => _phase = _Phase.signedOut);
       } else if (error.kind == ApiError.unauthorized ||
           error.kind == ApiError.forbidden) {
-        await _clearSession();
+        await _clearSession(expired: error.kind == ApiError.unauthorized);
       } else {
         setState(() => _phase = _Phase.validationFailed);
       }
@@ -120,20 +123,27 @@ class _AuthGateState extends State<AuthGate> {
     }
     setState(() {
       _verifiedToken = token;
+      _sessionExpired = false;
       _phase = _Phase.authenticated;
     });
   }
 
-  Future<void> _clearSession({bool revoke = false}) async {
+  Future<void> _clearSession({
+    bool revoke = false,
+    bool expired = false,
+  }) async {
     if (_phase == _Phase.clearing) return;
     final attempt = ++_attempt;
     setState(() {
       _verifiedToken = null;
+      _sessionExpired = expired;
       _phase = _Phase.clearing;
     });
     try {
       if (revoke) {
         _revocationFailed = !await AuthFlow.logout(widget.api, widget.session);
+      } else if (expired) {
+        await widget.session.expire();
       } else {
         await widget.session.clear();
       }
@@ -187,13 +197,15 @@ class _AuthGateState extends State<AuthGate> {
       _Phase.clearFailed => WayhunterErrorView(
         title: 'Could not clear secure session storage',
         message: 'Retry to finish signing out.',
-        onRetry: _clearSession,
+        onRetry: () => _clearSession(expired: _sessionExpired),
       ),
       _Phase.signedOut => AuthFlow(
         api: widget.api,
         session: widget.session,
         onSignedIn: _openShell,
-        signInNotice: _revocationFailed
+        signInNotice: _sessionExpired
+            ? 'Your session ended. Sign in again.'
+            : _revocationFailed
             ? 'Signed out on this device. Server revocation could not be confirmed.'
             : null,
       ),

@@ -85,7 +85,10 @@ class ApiGamesReader implements GamesReader {
 
   static MyGameAttempt _attempt(Object? item) {
     final dto = _object(item);
-    final deadline = _field<String?>(dto, 'deadlineUtc');
+    final started = decodeApiUtc(_field<String>(dto, 'startedAtUtc'));
+    final expiry = _field<String?>(dto, 'deadlineUtc');
+    final deadline = expiry == null ? null : decodeApiUtc(expiry);
+    if (deadline != null && !deadline.isAfter(started)) throw _invalid;
     final status = switch (_field<int>(dto, 'status')) {
       0 => GameAttemptStatus.notStarted,
       1 => GameAttemptStatus.inProgress,
@@ -97,8 +100,8 @@ class ApiGamesReader implements GamesReader {
     return (
       id: _id(dto, 'attemptId'),
       gameId: _id(dto, 'gameId'),
-      startedAt: _date(_field<String>(dto, 'startedAtUtc')),
-      deadline: deadline == null ? null : _date(deadline),
+      startedAt: started,
+      deadline: deadline,
       status: status,
       currentStepNumber: _count(dto, 'currentStepNumber'),
       totalSteps: _count(dto, 'totalSteps'),

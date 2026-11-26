@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wayhunter_mobile/app/bootstrap/foundation_services.dart';
 import 'package:wayhunter_mobile/app/router/app_routes.dart';
@@ -9,7 +10,9 @@ import 'package:wayhunter_mobile/app/wayhunter_app.dart';
 import 'package:wayhunter_mobile/core/auth/session_controller.dart';
 import 'package:wayhunter_mobile/core/network/api_client.dart';
 import 'package:wayhunter_mobile/core/storage/credential_store.dart';
+import 'package:wayhunter_mobile/features/traveller/active_trip/data/trip_recovery_store.dart';
 import 'package:wayhunter_mobile/features/traveller/active_trip/data/trip_sessions_api.dart';
+import 'package:wayhunter_mobile/features/traveller/active_trip/domain/trip_session.dart';
 import 'package:wayhunter_mobile/shared/domain/models/navigation_refs.dart';
 
 import 'wallet_balance_fixture.dart';
@@ -62,6 +65,35 @@ class _Store implements CredentialStore {
   Future<void> clear() async => data = null;
 }
 
+class _RecoveryStore implements TripRecoveryStore {
+  final values = <(String, String), String>{};
+  bool failWrites = false;
+  bool failDeletes = false;
+  bool deleteBeforeFailure = false;
+  Future<void>? pendingDelete;
+  void Function()? onDelete;
+
+  @override
+  Future<String?> read(String owner, String trip) async =>
+      values[(owner, trip)];
+
+  @override
+  Future<void> write(String owner, String trip, String? pending) async {
+    if (pending == null) {
+      if (failDeletes && !deleteBeforeFailure) {
+        throw const ApiException(ApiError.unavailable);
+      }
+      values.remove((owner, trip));
+      onDelete?.call();
+      await pendingDelete;
+      if (failDeletes) throw const ApiException(ApiError.unavailable);
+    } else {
+      if (failWrites) throw const ApiException(ApiError.unavailable);
+      values[(owner, trip)] = pending;
+    }
+  }
+}
+
 class _Transport implements HttpTransport {
   final requests = <TransportRequest>[];
   late FutureOr<TransportResponse> Function(TransportRequest) handle;
@@ -74,6 +106,13 @@ class _Transport implements HttpTransport {
 }
 
 class _Harness {
+  _Harness({
+    this.notifyUnauthorized = false,
+    this.timeout = const Duration(seconds: 1),
+  });
+
+  final bool notifyUnauthorized;
+  final Duration timeout;
   final transport = _Transport();
   final store = _Store();
   late final session = SessionController(store);
@@ -81,7 +120,10 @@ class _Harness {
     baseUrl: Uri.https('example.invalid'),
     tokens: session,
     transport: transport,
-    timeout: const Duration(seconds: 1),
+    timeout: timeout,
+    captureUnauthorizedHandler: notifyUnauthorized
+        ? session.captureUnauthorizedHandler
+        : null,
   );
 
   void mock(FutureOr<TransportResponse> Function(TransportRequest) respond) {
@@ -97,11 +139,7 @@ class _Harness {
       '/api/mobile/advertisements/active' => _json([]),
       walletBalancePath => walletBalanceResponse(),
       '/api/mobile/auth/logout' => const TransportResponse(204, []),
-      '/api/mobile/identity/login' => _json({
-        'userId': _other,
-        'accessToken': 'synthetic-other-account',
-        'expiresAtUtc': '2099-01-01T00:00:00Z',
-      }),
+      '/api/mobile/identity/login' => _loginResponse(request),
       _planPath =>
         request.headers['Authorization'] == 'Bearer synthetic-session-owner'
             ? _json(_plan())
@@ -110,11 +148,27 @@ class _Harness {
     };
   }
 
-  Future<void> open(WidgetTester tester) async {
+  TransportResponse _loginResponse(TransportRequest request) {
+    final sameOwner =
+        jsonDecode(request.body!)['email'] == 'visitor@example.invalid';
+    return _json({
+      'userId': sameOwner ? _owner : _other,
+      'accessToken': sameOwner
+          ? 'synthetic-session-owner'
+          : 'synthetic-other-account',
+      'expiresAtUtc': '2099-01-01T00:00:00Z',
+    });
+  }
+
+  Future<void> open(
+    WidgetTester tester, {
+    TripRecoveryStore? recoveryStore,
+  }) async {
     await tester.pumpWidget(
       FoundationServices(
         api: api,
         session: session,
+        tripRecovery: recoveryStore,
         child: const WayhunterApp.authenticated(apiConfigured: true),
       ),
     );
@@ -125,6 +179,18 @@ class _Harness {
       .where((r) => r.uri.path.startsWith(_startPath))
       .toList();
 }
+
+Matcher _apiError(ApiError kind) =>
+    isA<ApiException>().having((error) => error.kind, 'kind', kind);
+
+const _ownerCredential = SessionCredential(
+  user: UserRef(_owner),
+  accessToken: 'synthetic-session-owner',
+);
+const _otherCredential = SessionCredential(
+  user: UserRef(_other),
+  accessToken: 'synthetic-other-account',
+);
 
 NavigatorState _navigator(WidgetTester tester) =>
     tester.state<NavigatorState>(find.byType(Navigator));
@@ -157,6 +223,420 @@ Future<void> _openActive(
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets(
+    'Start 401 expires the session and the same owner can start after signing in',
+    (tester) async {
+      final h = _Harness(notifyUnauthorized: true);
+      final store = _RecoveryStore();
+      var attempts = 0;
+      h.mock((request) {
+        if (request.uri.path == '$_sessionPath/recover') {
+          return _json(_session(1));
+        }
+        expect(request.uri.path, _startPath);
+        expect(request.method, ApiMethod.post);
+        expect(store.values[(_owner, _planId)], pendingTripStart);
+        return ++attempts == 1
+            ? const TransportResponse(401, [])
+            : _json(_session(1));
+      });
+      await h.open(tester, recoveryStore: store);
+      await _openPlan(tester);
+      await _tap(tester, 'Start trip');
+      expect(find.text('Your session ended. Sign in again.'), findsOneWidget);
+      expect(h.session.state.status, SessionStatus.expired);
+      expect(h.store.data, isNull);
+      expect(store.values, isEmpty);
+
+      final fields = find.byType(TextFormField);
+      await tester.enterText(fields.first, 'visitor@example.invalid');
+      await tester.enterText(fields.last, 'SyntheticPass42');
+      await tester.tap(find.widgetWithText(FilledButton, 'Sign In'));
+      await tester.pumpAndSettle();
+      expect(h.session.state.user?.id, _owner);
+      await _openPlan(tester);
+      expect(find.text('Recover with session ID'), findsNothing);
+      await _tap(tester, 'Start trip');
+      expect(find.text('Active trip'), findsOneWidget);
+      expect(attempts, 2);
+    },
+  );
+
+  test(
+    'Finish 403 clears its marker after a definite owner rejection',
+    () async {
+      final h = _Harness(notifyUnauthorized: true);
+      await h.session.restore();
+      final store = _RecoveryStore();
+      final api = TripSessionsApi(h.api, h.session, recoveryStore: store);
+      h.mock((request) {
+        expect(request.uri.path, '$_sessionPath/finish');
+        expect(store.values[(_owner, _planId)], _sessionId);
+        return const TransportResponse(403, []);
+      });
+      await expectLater(
+        api.change(_args, TripSessionAction.finish),
+        throwsA(_apiError(ApiError.forbidden)),
+      );
+      expect(h.session.state.status, SessionStatus.authenticated);
+      expect(store.values, isEmpty);
+      expect(api.finishNeedsVerification(_args.plan), isFalse);
+      final replacement = TripSessionsApi(
+        h.api,
+        h.session,
+        recoveryStore: store,
+      );
+      await replacement.loadRecovery(_args.plan);
+      expect(replacement.finishNeedsVerification(_args.plan), isFalse);
+    },
+  );
+
+  test(
+    'Start keeps its marker for conflict, server failure and an invalid receipt',
+    () async {
+      for (final (response, kind) in [
+        (const TransportResponse(409, []), ApiError.conflict),
+        (const TransportResponse(503, []), ApiError.server),
+        (_json({'sessionId': _sessionId}), ApiError.invalidResponse),
+      ]) {
+        final h = _Harness();
+        await h.session.restore();
+        final store = _RecoveryStore();
+        h.mock((_) => response);
+        final api = TripSessionsApi(h.api, h.session, recoveryStore: store);
+        await expectLater(api.start(_args.plan), throwsA(_apiError(kind)));
+        expect(store.values, {(_owner, _planId): pendingTripStart});
+      }
+    },
+  );
+
+  test(
+    'Start timeout retains the marker in the secure-storage adapter',
+    () async {
+      const channel = MethodChannel(
+        'plugins.it_nomads.com/flutter_secure_storage',
+      );
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      final values = <String, String>{};
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        final key = call.arguments['key'] as String;
+        switch (call.method) {
+          case 'read':
+            return values[key];
+          case 'write':
+            values[key] = call.arguments['value'] as String;
+            return null;
+          default:
+            fail('Unexpected secure storage operation');
+        }
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final h = _Harness(timeout: const Duration(milliseconds: 20));
+      await h.session.restore();
+      const store = SecureTripRecoveryStore('trip-timeout-fixture');
+      final pending = Completer<TransportResponse>();
+      h.mock((_) => pending.future);
+      final api = TripSessionsApi(h.api, h.session, recoveryStore: store);
+      await expectLater(
+        api.start(_args.plan),
+        throwsA(_apiError(ApiError.timeout)),
+      );
+      expect(values.values, [pendingTripStart]);
+      final replacement = TripSessionsApi(
+        h.api,
+        h.session,
+        recoveryStore: store,
+      );
+      await expectLater(
+        replacement.start(_args.plan),
+        throwsA(_apiError(ApiError.conflict)),
+      );
+      expect(h.lifecycle, hasLength(1));
+      pending.complete(const TransportResponse(401, []));
+      expect(values.values, [pendingTripStart]);
+    },
+  );
+
+  test(
+    'a delayed trip 401 clears only the dispatching owner’s marker',
+    () async {
+      final h = _Harness(notifyUnauthorized: true);
+      await h.session.restore();
+      final store = _RecoveryStore();
+      final dispatched = Completer<void>();
+      final response = Completer<TransportResponse>();
+      h.mock((request) {
+        if (request.headers['Authorization'] ==
+            'Bearer synthetic-session-owner') {
+          dispatched.complete();
+          return response.future;
+        }
+        throw const TransportFailure();
+      });
+      final first = TripSessionsApi(h.api, h.session, recoveryStore: store);
+      final rejected = expectLater(
+        first.start(_args.plan),
+        throwsA(_apiError(ApiError.unauthorized)),
+      );
+      await dispatched.future;
+      await h.session.authenticate(_otherCredential);
+      final second = TripSessionsApi(h.api, h.session, recoveryStore: store);
+      await expectLater(
+        second.start(_args.plan),
+        throwsA(_apiError(ApiError.network)),
+      );
+      response.complete(const TransportResponse(401, []));
+      await rejected;
+      expect(store.values, {(_other, _planId): pendingTripStart});
+      expect(h.session.currentSessionRejected, isFalse);
+      expect(h.session.state.user?.id, _other);
+    },
+  );
+
+  test(
+    'same-owner replacement cannot reconcile or write during older cleanup',
+    () async {
+      final h = _Harness(notifyUnauthorized: true);
+      await h.session.restore();
+      final store = _RecoveryStore();
+      final rejectedResponse = Completer<TransportResponse>();
+      final dispatched = Completer<void>();
+      final cleanup = Completer<void>();
+      final deleting = Completer<void>();
+      store
+        ..pendingDelete = cleanup.future
+        ..onDelete = deleting.complete;
+      h.mock((_) {
+        dispatched.complete();
+        return rejectedResponse.future;
+      });
+      final old = TripSessionsApi(h.api, h.session, recoveryStore: store);
+      final rejected = expectLater(
+        old.start(_args.plan),
+        throwsA(_apiError(ApiError.unauthorized)),
+      );
+      await dispatched.future;
+      await h.session.authenticate(_ownerCredential);
+      rejectedResponse.complete(const TransportResponse(401, []));
+      // Wait until the fake delete takes effect but has not yet acknowledged it.
+      await deleting.future;
+      expect(store.values, isEmpty);
+
+      final replacement = TripSessionsApi(
+        h.api,
+        h.session,
+        recoveryStore: store,
+      );
+      await expectLater(
+        replacement.recover(_args),
+        throwsA(_apiError(ApiError.conflict)),
+      );
+      await expectLater(
+        replacement.start(_args.plan),
+        throwsA(_apiError(ApiError.conflict)),
+      );
+      expect(h.lifecycle, hasLength(1));
+      cleanup.complete();
+      await rejected;
+
+      h.mock((_) => throw const TransportFailure());
+      await expectLater(
+        replacement.start(_args.plan),
+        throwsA(_apiError(ApiError.network)),
+      );
+      expect(store.values, {(_owner, _planId): pendingTripStart});
+      expect(h.session.currentSessionRejected, isFalse);
+      expect(h.lifecycle, hasLength(2));
+    },
+  );
+
+  for (final deleteBeforeFailure in [false, true]) {
+    test(
+      'failed cleanup blocks a replacement adapter (delete took effect: $deleteBeforeFailure)',
+      () async {
+        final h = _Harness(notifyUnauthorized: true);
+        await h.session.restore();
+        final store = _RecoveryStore()
+          ..deleteBeforeFailure = deleteBeforeFailure;
+        h.mock((_) {
+          store.failDeletes = true;
+          store.failWrites = true;
+          return const TransportResponse(401, []);
+        });
+        final api = TripSessionsApi(h.api, h.session, recoveryStore: store);
+        await expectLater(
+          api.start(_args.plan),
+          throwsA(_apiError(ApiError.unavailable)),
+        );
+        expect(
+          store.values[(_owner, _planId)],
+          deleteBeforeFailure ? null : pendingTripStart,
+        );
+        await h.session.authenticate(_ownerCredential);
+        final replacement = TripSessionsApi(
+          h.api,
+          h.session,
+          recoveryStore: store,
+        );
+        await replacement.loadRecovery(_args.plan);
+        expect(replacement.startNeedsVerification(_args.plan), isTrue);
+        await expectLater(
+          replacement.start(_args.plan),
+          throwsA(_apiError(ApiError.conflict)),
+        );
+        expect(h.lifecycle, hasLength(1));
+      },
+    );
+  }
+
+  test(
+    'an unconfirmed Start on disk blocks another Start until a verified GET',
+    () async {
+      final h = _Harness();
+      await h.session.restore();
+      final store = _RecoveryStore();
+      TripSessionsApi api() =>
+          TripSessionsApi(h.api, h.session, recoveryStore: store);
+      final conflict = isA<ApiException>().having(
+        (e) => e.kind,
+        'kind',
+        ApiError.conflict,
+      );
+      store.failWrites = true;
+      await expectLater(api().start(_args.plan), throwsA(isA<ApiException>()));
+      expect(h.lifecycle, isEmpty);
+      store.failWrites = false;
+      h.mock((request) {
+        expect(request.uri.path, _startPath);
+        expect(store.values[(_owner, _planId)], pendingTripStart);
+        throw const TransportFailure();
+      });
+      await expectLater(api().start(_args.plan), throwsA(isA<ApiException>()));
+      final relaunched = api();
+      await expectLater(relaunched.open(_args.plan), throwsA(conflict));
+      expect(relaunched.startNeedsVerification(_args.plan), isTrue);
+      h.mock((request) {
+        expect(request.method, ApiMethod.get);
+        expect(request.uri.path, '$_sessionPath/recover');
+        return _json(_session(1));
+      });
+      expect(
+        (await relaunched.recover(_args)).status,
+        TripSessionStatus.active,
+      );
+      expect((await relaunched.open(_args.plan)).session.id, _sessionId);
+      expect(store.values, isEmpty);
+      expect(h.lifecycle.map((r) => r.method), [ApiMethod.post, ApiMethod.get]);
+    },
+  );
+
+  test(
+    'a lost Finish persists its ID and a recovery 404 keeps mutations blocked',
+    () async {
+      final h = _Harness();
+      await h.session.restore();
+      final store = _RecoveryStore();
+      TripSessionsApi api() =>
+          TripSessionsApi(h.api, h.session, recoveryStore: store);
+      final active = api();
+      h.mock((request) {
+        if (request.method == ApiMethod.get) {
+          return const TransportResponse(404, []);
+        }
+        expect(store.values[(_owner, _planId)], _sessionId);
+        throw const TransportFailure();
+      });
+      await expectLater(
+        active.change(_args, TripSessionAction.finish),
+        throwsA(isA<ApiException>()),
+      );
+      final relaunched = api();
+      expect((await relaunched.open(_args.plan)).session.id, _sessionId);
+      await expectLater(
+        relaunched.recover(_args),
+        throwsA(isA<ApiException>()),
+      );
+      await expectLater(
+        relaunched.change(_args, TripSessionAction.finish),
+        throwsA(isA<ApiException>()),
+      );
+      expect(store.values[(_owner, _planId)], _sessionId);
+      expect(h.lifecycle.map((r) => r.method), [ApiMethod.post, ApiMethod.get]);
+    },
+  );
+
+  testWidgets(
+    'Safe Check-in retries a lost receipt and confirms the same logical check-in',
+    (tester) async {
+      final h = _Harness();
+      var checks = 0;
+      h.mock((request) {
+        if (request.uri.path == '$_sessionPath/recover') {
+          return _json(_session(1));
+        }
+        expect(request.uri.path, '$_sessionPath/im-safe');
+        expect(request.method, ApiMethod.post);
+        expect(request.body, isNull);
+        expect(
+          request.headers['Authorization'],
+          'Bearer synthetic-session-owner',
+        );
+        if (++checks == 1) throw const TransportFailure();
+        return _json({
+          'checkInId': _other,
+          'tripPlanId': _planId,
+          'sessionId': _sessionId,
+          'userId': _owner,
+          'checkedInAtUtc': '2026-11-27T02:00:00Z',
+          'created': false,
+        });
+      });
+      await h.open(tester);
+      await _openActive(tester);
+      await _tap(tester, 'I’m Safe');
+      expect(
+        find.textContaining('Check-in could not be confirmed'),
+        findsOneWidget,
+      );
+      await _tap(tester, 'I’m Safe');
+      expect(find.textContaining('Safe check-in recorded'), findsOneWidget);
+      expect(find.text('I’m Safe'), findsNothing);
+      expect(checks, 2);
+    },
+  );
+
+  testWidgets(
+    'saved trip reads its own route-matched hazards before starting',
+    (tester) async {
+      final h = _Harness();
+      h.mock((request) {
+        expect(request.method, ApiMethod.get);
+        expect(request.uri.path, '/api/mobile/trips/$_planId/hazards');
+        return _json([
+          {
+            'hazardId': _other,
+            'status': 1,
+            'isVerified': false,
+            'hasPhotoEvidence': true,
+            'photoCapturedAtUtc': '2025-11-27T01:00:00Z',
+            'reportedAtUtc': '2025-11-27T02:00:00Z',
+            'expiresAtUtc': '2025-11-28T02:00:00Z',
+            'description': 'Expired test warning',
+          },
+        ]);
+      });
+      await h.open(tester);
+      await _openPlan(tester);
+      await _tap(tester, 'Trip safety');
+      expect(find.text('Route warnings cannot be confirmed'), findsOneWidget);
+      expect(find.text('Expired test warning'), findsNothing);
+      expect(h.lifecycle, isEmpty);
+    },
+  );
+
   testWidgets(
     'saved trip starts once, recovers, pauses, resumes and completes from server DTO',
     (tester) async {

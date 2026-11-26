@@ -118,6 +118,7 @@ class MyGameAttemptsScreen extends StatelessWidget {
       if (reader case final source?)
         _GameRead(
           read: source.readMyAttempts,
+          refreshLabel: 'Refresh attempts',
           builder: (context, attempts) => attempts.isEmpty
               ? const WayhunterEmptyView(title: 'No game attempts yet')
               : Column(
@@ -164,10 +165,15 @@ String _remaining(DateTime expiry) {
 }
 
 class _GameRead<T> extends StatefulWidget {
-  const _GameRead({required this.read, required this.builder});
+  const _GameRead({
+    required this.read,
+    required this.builder,
+    this.refreshLabel,
+  });
 
   final Future<T> Function() read;
   final Widget Function(BuildContext, T) builder;
+  final String? refreshLabel;
 
   @override
   State<_GameRead<T>> createState() => _GameReadState<T>();
@@ -224,7 +230,17 @@ class _GameReadState<T> extends State<_GameRead<T>> {
           onRetry: _retry,
         );
       }
-      return widget.builder(context, snapshot.data as T);
+      final content = widget.builder(context, snapshot.data as T);
+      final refreshLabel = widget.refreshLabel;
+      if (refreshLabel == null) return content;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: WayhunterLayout.medium,
+        children: [
+          WayhunterButton.secondary(label: refreshLabel, onPressed: _retry),
+          content,
+        ],
+      );
     },
   );
 }

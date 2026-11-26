@@ -127,6 +127,53 @@ class _DeviceProbe
 }
 
 void main() {
+  testWidgets(
+    'memory retry keeps the original caption and operation after a lost response',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final h = _Harness();
+      await h.signIn();
+      h.transport.respond = (_) async => throw const TransportFailure();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TripMemoryCreateScreen(
+              plan: const TripPlanRef(_plan),
+              api: TripMemoriesApi(h.client, h.session),
+            ),
+          ),
+        ),
+      );
+      final caption = find.byType(TextFormField);
+      await tester.enterText(caption, 'A quiet stop');
+      final save = find.text('Save private memory');
+      await tester.ensureVisible(save);
+      await tester.pumpAndSettle();
+      await tester.tap(save);
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextFormField>(caption).controller!.text,
+        'A quiet stop',
+      );
+      expect(
+        tester.widget<EditableText>(find.byType(EditableText)).readOnly,
+        isTrue,
+      );
+      final retry = find.text('Retry');
+      await tester.ensureVisible(retry);
+      await tester.pumpAndSettle();
+      await tester.tap(retry);
+      await tester.pumpAndSettle();
+      expect(h.transport.requests, hasLength(2));
+      expect(h.transport.requests.last.body, h.transport.requests.first.body);
+      expect(
+        jsonDecode(h.transport.requests.last.body!)['caption'],
+        'A quiet stop',
+      );
+    },
+  );
+
   test(
     'hazard adapter maps authenticated route-scoped response and states',
     () async {
