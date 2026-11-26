@@ -1,11 +1,13 @@
 import 'package:wayhunter_mobile/core/network/api_client.dart';
+import 'package:wayhunter_mobile/core/network/api_dto.dart';
+import 'package:wayhunter_mobile/core/network/session_api.dart';
 
 import '../domain/games_reader.dart';
 
 class ApiGamesReader implements GamesReader {
   const ApiGamesReader(this._api);
 
-  final ApiClient _api;
+  final SessionApi _api;
   static const _invalid = ApiException(ApiError.invalidResponse);
 
   @override
@@ -32,12 +34,40 @@ class ApiGamesReader implements GamesReader {
   Future<List<MyGameAttempt>> readMyAttempts() async =>
       _list(await _get(['me', 'attempts']), _attempt);
 
-  Future<Object?> _get(List<String> path) => _api.request(ApiMethod.get, [
-    'api',
-    'mobile',
-    'games',
-    ...path,
-  ], requiresSession: true);
+  Future<List<CreatedGameSummary>> readMyGames() async =>
+      _list(await _get(['me']), (entry) {
+        final dto = _object(entry);
+        final id = _field<String>(dto, 'gameId');
+        if (!isApiGuid(id)) throw _invalid;
+        final title = _field<String?>(dto, 'title');
+        final approvalValue = _field<String?>(dto, 'approvedAtUtc');
+        final expiryValue = _field<String?>(dto, 'expiresAtUtc');
+        final approval = approvalValue == null
+            ? null
+            : decodeApiUtc(approvalValue);
+        final expiry = expiryValue == null ? null : decodeApiUtc(expiryValue);
+        if (approval != null && expiry != null && !expiry.isAfter(approval)) {
+          throw _invalid;
+        }
+        final status = switch (_field<int>(dto, 'status')) {
+          0 => GameCreationStatus.pending,
+          1 => GameCreationStatus.approved,
+          2 => GameCreationStatus.rejected,
+          3 => GameCreationStatus.archived,
+          4 => GameCreationStatus.draft,
+          5 => GameCreationStatus.disabled,
+          _ => throw _invalid,
+        };
+        return CreatedGameSummary(
+          title == null || title.trim().isEmpty ? 'Untitled game' : title,
+          status,
+          id: id,
+          expiresAt: expiry,
+        );
+      });
+
+  Future<Object?> _get(List<String> path) =>
+      _api.request(ApiMethod.get, ['api', 'mobile', 'games', ...path]);
 
   static PublicGame _game(Map<String, Object?> dto) {
     final title = _field<String>(dto, 'title');

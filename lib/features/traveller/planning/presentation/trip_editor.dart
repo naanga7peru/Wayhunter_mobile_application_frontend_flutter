@@ -141,10 +141,14 @@ class _TripEditorState extends State<TripEditor> {
     });
     try {
       final saved = plan == null
-          ? await widget.api.create(
-              _info!,
-              _stops.map((stop) => stop.name).toList(),
-            )
+          ? await widget.api.create(_info!, [
+              for (final stop in _stops)
+                TripStopDraft(
+                  stop.name,
+                  latitude: stop.location?.latitude,
+                  longitude: stop.location?.longitude,
+                ),
+            ])
           : await widget.api.update(plan, _info!);
       if (!mounted) return;
       if (plan == null) {
@@ -276,7 +280,7 @@ class _TripEditorState extends State<TripEditor> {
       ListTile(
         contentPadding: EdgeInsets.zero,
         title: Text('Draft pin ${locationCoordinates(location)}'),
-        subtitle: const Text('Add a stop name. Only the name is saved.'),
+        subtitle: const Text('Add a stop name to save this map location.'),
         trailing: IconButton(
           tooltip: 'Clear draft pin',
           onPressed: () => setState(() => _stopLocation = null),
@@ -291,7 +295,9 @@ class _TripEditorState extends State<TripEditor> {
           final stop = _stops[index];
           return TripStopTile(
             name: stop.name,
-            location: stop.location,
+            coordinates: stop.location == null
+                ? null
+                : 'Draft pin ${locationCoordinates(stop.location!)}',
             index: index,
             moveUp: index > 0 ? () => _moveStop(index, index - 1) : null,
             moveDown: index + 1 < _stops.length
@@ -387,7 +393,7 @@ class TripStopTile extends StatelessWidget {
     super.key,
     required this.name,
     required this.index,
-    this.location,
+    this.coordinates,
     this.moveUp,
     this.moveDown,
     this.remove,
@@ -395,7 +401,7 @@ class TripStopTile extends StatelessWidget {
 
   final String name;
   final int index;
-  final LatLng? location;
+  final String? coordinates;
   final VoidCallback? moveUp;
   final VoidCallback? moveDown;
   final VoidCallback? remove;
@@ -405,9 +411,7 @@ class TripStopTile extends StatelessWidget {
     contentPadding: EdgeInsets.zero,
     leading: Text('${index + 1}'),
     title: Text(name),
-    subtitle: location == null
-        ? null
-        : Text('Draft pin ${locationCoordinates(location!)}'),
+    subtitle: coordinates == null ? null : Text(coordinates!),
     trailing: Row(
       mainAxisSize: MainAxisSize.min,
       children: [

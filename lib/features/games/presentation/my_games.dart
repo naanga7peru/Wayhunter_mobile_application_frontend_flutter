@@ -5,16 +5,10 @@ import 'package:wayhunter_mobile/core/widgets/wayhunter_page.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_states.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_surface.dart';
 import 'package:wayhunter_mobile/features/games/presentation/game_navigation.dart';
+import 'package:wayhunter_mobile/features/games/domain/games_reader.dart';
 
-enum GameCreationStatus { pending, approved, rejected, archived }
-
-class CreatedGameSummary {
-  const CreatedGameSummary(this.title, this.status, {this.rejectionReason});
-
-  final String title;
-  final GameCreationStatus status;
-  final String? rejectionReason;
-}
+export 'package:wayhunter_mobile/features/games/domain/games_reader.dart'
+    show CreatedGameSummary, GameCreationStatus;
 
 class MyGamesScreen extends StatefulWidget {
   const MyGamesScreen({super.key, this.loadHistory, this.enableDemo = false});
@@ -140,6 +134,12 @@ class _GameHistoryCard extends StatelessWidget {
         WayhunterStatusTone.neutral,
         'Retained in your history after expiry.',
       ),
+      GameCreationStatus.draft => ('Draft', WayhunterStatusTone.neutral, null),
+      GameCreationStatus.disabled => (
+        'Disabled',
+        WayhunterStatusTone.neutral,
+        null,
+      ),
     };
     return WayhunterSurfaceCard(
       child: Column(
@@ -148,7 +148,11 @@ class _GameHistoryCard extends StatelessWidget {
         children: [
           Text(game.title, style: Theme.of(context).textTheme.titleMedium),
           WayhunterStatusIndicator(label: label, tone: tone),
-          Text(message),
+          if (message != null) Text(message),
+          if (game.expiresAt case final expiry?)
+            Text(
+              'Expiry · ${MaterialLocalizations.of(context).formatMediumDate(expiry.toLocal())}',
+            ),
           if (demo) const Text('Development example'),
         ],
       ),

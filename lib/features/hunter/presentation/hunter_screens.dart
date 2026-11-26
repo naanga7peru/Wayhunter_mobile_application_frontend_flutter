@@ -8,13 +8,16 @@ import 'package:wayhunter_mobile/core/widgets/wayhunter_page.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_states.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_surface.dart';
 import 'package:wayhunter_mobile/features/hunter/domain/hunter_history.dart';
+import 'package:wayhunter_mobile/features/profile/presentation/account_read_panel.dart';
 import 'package:wayhunter_mobile/shared/domain/models/navigation_refs.dart';
 import 'package:wayhunter_mobile/shared/presentation/person2_content.dart';
 
 const hunterAddNewPlaceRoute = 'hunter.addNewPlace';
 
 class HunterHomeScreen extends StatelessWidget {
-  const HunterHomeScreen({super.key});
+  const HunterHomeScreen({super.key, this.loadPlaces});
+
+  final Future<List<ApprovedHunterPlace>> Function()? loadPlaces;
 
   @override
   Widget build(BuildContext context) => Person2Content(
@@ -62,11 +65,28 @@ class HunterHomeScreen extends StatelessWidget {
           ],
         ),
       ),
-      const WayhunterUnavailableView(
-        title: 'Published discoveries unavailable',
-        message:
-            'Published places will appear here when the discovery service is connected.',
-      ),
+      if (loadPlaces case final load?)
+        AccountReadPanel<List<ApprovedHunterPlace>>(
+          label: 'published discoveries',
+          load: load,
+          content: (places) => places.isEmpty
+              ? const WayhunterEmptyView(title: 'No published discoveries')
+              : Column(
+                  children: [
+                    const WayhunterHeader(title: 'Published discoveries'),
+                    for (final place in places)
+                      ListTile(
+                        leading: const Icon(Icons.place_outlined),
+                        title: Text(place.name),
+                        subtitle: Text(place.district),
+                      ),
+                  ],
+                ),
+        )
+      else
+        const WayhunterUnavailableView(
+          title: 'Published discoveries unavailable',
+        ),
     ],
   );
 }
@@ -188,10 +208,16 @@ class _EvidenceRequirements extends StatelessWidget {
 }
 
 class MyHuntsScreen extends StatefulWidget {
-  const MyHuntsScreen({super.key, required this.history, this.demoHistory});
+  const MyHuntsScreen({
+    super.key,
+    required this.history,
+    this.demoHistory,
+    this.readStatus,
+  });
 
   final HunterHistory history;
   final HunterHistory? demoHistory;
+  final Future<HuntSummary> Function(String)? readStatus;
 
   @override
   State<MyHuntsScreen> createState() => _MyHuntsScreenState();
@@ -297,44 +323,78 @@ class _MyHuntsScreenState extends State<MyHuntsScreen> {
 
   void _openDetails(HuntSummary hunt) {
     final demo = _demo;
+    final readStatus = demo ? null : widget.readStatus;
+    final services = context
+        .getInheritedWidgetOfExactType<FoundationServices>();
+    final session = services?.session;
+    final state = session?.state;
+    final details = Person2Content(
+      children: [
+        const WayhunterHeader(title: 'Hunt details'),
+        if (demo)
+          const WayhunterStatusIndicator(
+            label: 'Development demo data',
+            tone: WayhunterStatusTone.info,
+          ),
+        if (readStatus != null && hunt.id != null)
+          AccountReadPanel<HuntSummary>(
+            label: 'hunt status',
+            load: () => readStatus(hunt.id!),
+            content: _HuntDetails.new,
+          )
+        else
+          _HuntDetails(hunt),
+      ],
+    );
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => WayhunterPageScaffold(
           appBar: AppBar(),
-          body: Person2Content(
-            children: [
-              const WayhunterHeader(title: 'Hunt details'),
-              if (demo)
-                const WayhunterStatusIndicator(
-                  label: 'Development demo data',
-                  tone: WayhunterStatusTone.info,
+          body: session == null
+              ? details
+              : ListenableBuilder(
+                  listenable: session,
+                  builder: (_, _) => identical(state, session.state)
+                      ? details
+                      : const WayhunterUnavailableView(
+                          title: 'Hunt status unavailable',
+                        ),
                 ),
-              WayhunterSurfaceCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      hunt.name,
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: WayhunterLayout.medium),
-                    _HuntStatusIndicator(hunt.status),
-                    const SizedBox(height: WayhunterLayout.medium),
-                    Text(switch (hunt.status) {
-                      HuntStatus.pending => 'Awaiting Admin review.',
-                      HuntStatus.approved => 'Review approved.',
-                      HuntStatus.rejected =>
-                        hunt.reviewReason ?? 'Review reason unavailable.',
-                    }),
-                  ],
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );
   }
+}
+
+class _HuntDetails extends StatelessWidget {
+  const _HuntDetails(this.hunt);
+
+  final HuntSummary hunt;
+
+  @override
+  Widget build(BuildContext context) => WayhunterSurfaceCard(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: WayhunterLayout.medium,
+      children: [
+        Text(hunt.name, style: Theme.of(context).textTheme.titleLarge),
+        if (hunt.district case final district?) Text(district),
+        _HuntStatusIndicator(hunt.status),
+        Text(switch (hunt.status) {
+          HuntStatus.draft => 'Draft',
+          HuntStatus.pending => 'Awaiting Admin review.',
+          HuntStatus.held => 'Held for review.',
+          HuntStatus.approved => 'Review approved.',
+          HuntStatus.rejected =>
+            hunt.reviewReason ?? 'Review reason unavailable.',
+        }),
+        if (hunt.submittedAt ?? hunt.createdAt case final time?)
+          Text(
+            MaterialLocalizations.of(context).formatMediumDate(time.toLocal()),
+          ),
+      ],
+    ),
+  );
 }
 
 class _HuntStatusIndicator extends StatelessWidget {
@@ -345,7 +405,9 @@ class _HuntStatusIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (label, tone) = switch (status) {
+      HuntStatus.draft => ('Draft', WayhunterStatusTone.neutral),
       HuntStatus.pending => ('Pending', WayhunterStatusTone.warning),
+      HuntStatus.held => ('Held', WayhunterStatusTone.warning),
       HuntStatus.approved => ('Approved', WayhunterStatusTone.success),
       HuntStatus.rejected => ('Rejected', WayhunterStatusTone.danger),
     };

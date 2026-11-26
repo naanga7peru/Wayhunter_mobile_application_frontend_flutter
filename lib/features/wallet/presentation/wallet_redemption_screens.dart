@@ -84,6 +84,7 @@ class _LiveRedemptionFormState extends State<_LiveRedemptionForm> {
         repository: widget.repository,
         requestId: request.requestId,
         initialRequest: request,
+        allowCancellation: true,
       ),
     );
     if (mounted) setState(() => _intent = null);
@@ -127,8 +128,12 @@ class _LiveRedemptionFormState extends State<_LiveRedemptionForm> {
 }
 
 class _VoucherLookup extends StatelessWidget {
-  const _VoucherLookup({required this.repository});
+  const _VoucherLookup({
+    required this.repository,
+    required this.allowCancellation,
+  });
   final VoucherRedemptionRepository repository;
+  final bool allowCancellation;
 
   @override
   Widget build(BuildContext context) => _WalletPage(
@@ -143,7 +148,11 @@ class _VoucherLookup extends StatelessWidget {
         action: 'Find request',
         onSubmit: (id) => _open(
           context,
-          _VoucherRequestPage(repository: repository, requestId: id),
+          _VoucherRequestPage(
+            repository: repository,
+            requestId: id,
+            allowCancellation: allowCancellation,
+          ),
         ),
       ),
     ],
@@ -154,11 +163,13 @@ class _VoucherRequestPage extends StatefulWidget {
   const _VoucherRequestPage({
     required this.repository,
     required this.requestId,
+    required this.allowCancellation,
     this.initialRequest,
   });
 
   final VoucherRedemptionRepository repository;
   final String requestId;
+  final bool allowCancellation;
   final VoucherRedemptionRequest? initialRequest;
 
   @override
@@ -242,7 +253,8 @@ class _VoucherRequestPageState extends State<_VoucherRequestPage> {
                 Text('${formatCoins(request.costCoins)} Coins'),
                 if (request.decisionReason case final reason?) Text(reason),
                 if (_cancelling) const Text('Checking cancellation…'),
-                if (request.status == VoucherRequestStatus.pending &&
+                if (widget.allowCancellation &&
+                    request.status == VoucherRequestStatus.pending &&
                     !_cancelling)
                   _VoucherInput(
                     label: 'Cancellation reason',

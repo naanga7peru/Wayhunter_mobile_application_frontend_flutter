@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:wayhunter_mobile/core/network/api_client.dart';
+import 'package:wayhunter_mobile/shared/domain/models/coordinates.dart';
 
 bool isTripPlanId(String id) =>
     id != '00000000-0000-0000-0000-000000000000' &&
@@ -44,6 +45,29 @@ class TripInformation {
   };
 }
 
+class TripStopDraft {
+  const TripStopDraft(this.name, {this.placeId, this.latitude, this.longitude});
+
+  final String name;
+  final String? placeId;
+  final num? latitude;
+  final num? longitude;
+
+  Map<String, Object> toJson() {
+    final lat = latitude;
+    final lng = longitude;
+    final providerId = placeId;
+    if (!validCoordinates(lat, lng) || (providerId?.length ?? 0) > 256) {
+      throw const ApiException(ApiError.rejected);
+    }
+    return {
+      'name': name,
+      'placeId': ?providerId,
+      if (lat != null && lng != null) ...{'latitude': lat, 'longitude': lng},
+    };
+  }
+}
+
 class TripStop {
   const TripStop({
     required this.id,
@@ -62,14 +86,20 @@ class TripStop {
   final num? longitude;
 
   factory TripStop.fromJson(Object? json) {
-    if (json case {
-      'stopId': final String id,
-      'orderIndex': final int order,
-      'name': final String name,
-      'placeId': final String? placeId,
-      'latitude': final num? latitude,
-      'longitude': final num? longitude,
-    } when isTripPlanId(id) && order >= 0 && name.trim().isNotEmpty) {
+    if (json
+        case {
+          'stopId': final String id,
+          'orderIndex': final int order,
+          'name': final String name,
+          'placeId': final String? placeId,
+          'latitude': final num? latitude,
+          'longitude': final num? longitude,
+        }
+        when isTripPlanId(id) &&
+            order >= 0 &&
+            name.trim().isNotEmpty &&
+            (placeId?.length ?? 0) <= 256 &&
+            validCoordinates(latitude, longitude)) {
       return TripStop(
         id: id,
         order: order,

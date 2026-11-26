@@ -7,11 +7,23 @@ typedef LiveWalletBalance = ({
 
 enum WalletTransactionKind { reward, hold, debit, release, correction }
 
+enum WalletRewardType {
+  welcome('Welcome reward'),
+  hunter('Hunter approval reward'),
+  gameCreator('Game creation reward'),
+  gameWinner('Game winner reward');
+
+  const WalletRewardType(this.label);
+  final String label;
+}
+
 typedef LiveWalletTransaction = ({
   String id,
   WalletTransactionKind kind,
   int coins,
   String status,
+  WalletRewardType? rewardType,
+  DateTime recordedAt,
 });
 
 typedef WalletTransactionPage = ({
@@ -37,6 +49,8 @@ abstract interface class WalletReader {
   Future<WalletTransactionPage> readTransactions({
     int page = 1,
     int pageSize = 20,
+    bool rewardsOnly = false,
   });
   Future<List<LiveVoucherOffer>> readOffers();
+  Future<LiveVoucherOffer> readOffer(String id);
 }

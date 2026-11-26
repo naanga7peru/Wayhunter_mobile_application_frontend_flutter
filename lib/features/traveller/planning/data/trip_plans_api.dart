@@ -65,19 +65,19 @@ class TripPlansApi {
   Future<TripPlan> get(String id) async =>
       _decode(await _request(ApiMethod.get, [_id(id)]), id);
 
-  Future<TripPlan> create(TripInformation info, List<String> stops) async =>
-      _decode(
-        await _request(
-          ApiMethod.post,
-          [],
-          body: {
-            ...info.toJson(),
-            'initialStops': [
-              for (final name in stops) {'name': name},
-            ],
-          },
-        ),
-      );
+  Future<TripPlan> create(
+    TripInformation info,
+    List<TripStopDraft> stops,
+  ) async => _decode(
+    await _request(
+      ApiMethod.post,
+      [],
+      body: {
+        ...info.toJson(),
+        'initialStops': [for (final stop in stops) stop.toJson()],
+      },
+    ),
+  );
 
   Future<TripPlan> update(TripPlan current, TripInformation info) async {
     if (!current.hasRowVersion) throw const ApiException(ApiError.unavailable);
@@ -95,17 +95,18 @@ class TripPlansApi {
     await _request(ApiMethod.delete, [_id(id)]);
   }
 
-  Future<TripPlan> addStop(TripPlan current, String name) async => _decode(
-    await _request(
-      ApiMethod.post,
-      [_id(current.id), 'stops'],
-      body: {
-        'name': name,
-        if (current.hasRowVersion) 'expectedRowVersion': current.rowVersion,
-      },
-    ),
-    current.id,
-  );
+  Future<TripPlan> addStop(TripPlan current, TripStopDraft stop) async =>
+      _decode(
+        await _request(
+          ApiMethod.post,
+          [_id(current.id), 'stops'],
+          body: {
+            ...stop.toJson(),
+            if (current.hasRowVersion) 'expectedRowVersion': current.rowVersion,
+          },
+        ),
+        current.id,
+      );
 
   Future<TripPlan> reorder(TripPlan current, List<String> stopIds) async =>
       _decode(

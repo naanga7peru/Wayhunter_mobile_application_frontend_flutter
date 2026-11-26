@@ -265,19 +265,27 @@ void main() {
   final useGps = find.text('Use current location');
 
   testWidgets(
-    'confirmed pin survives Stop and Review navigation and sends only the stop name',
+    'confirmed pin survives draft navigation and reopens from the server',
     (tester) async {
       _mockPickerMap(tester);
       final h = _Harness();
       h.mock((request) {
         if (request.method == ApiMethod.post) {
           expect(body(request)['initialStops'], [
-            {'name': 'Map stop'},
+            {'name': 'Map stop', 'latitude': 8.0, 'longitude': 81.0},
             {'name': 'Manual stop'},
           ]);
           expect(body(request)['tripName'], 'Synthetic trip');
         }
-        return _json(request.method == ApiMethod.post ? 201 : 200, _plan());
+        return _json(
+          request.method == ApiMethod.post ? 201 : 200,
+          _plan(
+            stops: [
+              {..._stop(_stopB, 'Manual stop', 1)},
+              {..._stop(_stopA, 'Map stop', 0), 'latitude': 8, 'longitude': 81},
+            ],
+          ),
+        );
       });
       final picker = _PickerServices();
       await _openNewTripStops(tester, h, picker);
@@ -313,6 +321,86 @@ void main() {
       expect(h.transport.requests.where((r) => r.uri.path == _base), isEmpty);
       await tap(tester, find.text('Save trip'));
       expect(find.text('Saved trip'), findsOneWidget);
+      expect(find.text('Saved pin 8.00000, 81.00000'), findsOneWidget);
+    },
+  );
+
+  test(
+    'stop DTOs round-trip place IDs and coordinate bounds with RowVersion',
+    () async {
+      final h = _Harness();
+      addTearDown(h.session.dispose);
+      await h.session.authenticate(h.credential);
+      final api = h.api;
+      final initial = TripPlan.fromJson(_plan());
+      const stop = TripStopDraft(
+        'Provider stop',
+        placeId: 'fixture-place-id',
+        latitude: 90,
+        longitude: 180,
+      );
+      h.mock((request) {
+        expect(request.uri.path, '$_base/$_id/stops');
+        expect(request.method, ApiMethod.post);
+        expect(body(request), {
+          ...stop.toJson(),
+          'expectedRowVersion': _version,
+        });
+        return _json(
+          200,
+          _plan(
+            version: _nextVersion,
+            stops: [
+              {..._stop(_stopA, stop.name, 0), ...stop.toJson()},
+            ],
+          ),
+        );
+      });
+      final saved = await api.addStop(initial, stop);
+      expect(saved.rowVersion, _nextVersion);
+      expect(saved.stops.single.placeId, stop.placeId);
+      expect(saved.stops.single.latitude, stop.latitude);
+      expect(saved.stops.single.longitude, stop.longitude);
+
+      for (final (latitude, longitude) in <(num?, num?)>[
+        (null, 80),
+        (7, null),
+        (91, 80),
+        (7, -181),
+        (double.nan, 80),
+        (7, double.infinity),
+      ]) {
+        final invalidStop = TripStopDraft(
+          'Invalid',
+          latitude: latitude,
+          longitude: longitude,
+        );
+        final rejected = isA<ApiException>().having(
+          (e) => e.kind,
+          'kind',
+          ApiError.rejected,
+        );
+        await expectLater(
+          api.create(initial.information, [invalidStop]),
+          throwsA(rejected),
+        );
+        await expectLater(api.addStop(initial, invalidStop), throwsA(rejected));
+        expect(
+          () => TripStop.fromJson({
+            ..._stop(_stopB, 'Invalid', 1),
+            'latitude': latitude,
+            'longitude': longitude,
+          }),
+          throwsA(
+            isA<ApiException>().having(
+              (e) => e.kind,
+              'kind',
+              ApiError.invalidResponse,
+            ),
+          ),
+        );
+      }
+      expect(h.transport.requests, hasLength(1));
     },
   );
 

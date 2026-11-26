@@ -4,6 +4,7 @@ import 'package:wayhunter_mobile/app/bootstrap/foundation_services.dart';
 import 'package:wayhunter_mobile/app/router/app_routes.dart';
 import 'package:wayhunter_mobile/app/router/route_registration.dart';
 import 'package:wayhunter_mobile/core/auth/session_controller.dart';
+import 'package:wayhunter_mobile/core/network/session_api.dart';
 import 'package:wayhunter_mobile/features/games/data/api_games_reader.dart';
 import 'package:wayhunter_mobile/features/games/domain/games_reader.dart';
 import 'package:wayhunter_mobile/features/games/presentation/game_creation.dart';
@@ -12,6 +13,7 @@ import 'package:wayhunter_mobile/features/games/presentation/game_navigation.dar
 import 'package:wayhunter_mobile/features/games/presentation/game_playing.dart';
 import 'package:wayhunter_mobile/features/games/presentation/my_games.dart';
 import 'package:wayhunter_mobile/features/hunter/data/hunter_history_sources.dart';
+import 'package:wayhunter_mobile/features/hunter/data/api_hunter_reader.dart';
 import 'package:wayhunter_mobile/features/hunter/presentation/hunter_screens.dart';
 import 'package:wayhunter_mobile/features/leaderboards/presentation/leaderboard_screens.dart';
 import 'package:wayhunter_mobile/features/wallet/data/repositories/api_wallet_reader.dart';
@@ -20,7 +22,15 @@ import 'package:wayhunter_mobile/features/wallet/presentation/wallet_screens.dar
 import 'package:wayhunter_mobile/shared/domain/models/navigation_refs.dart';
 
 final person2Routes = <String, RouteRegistration<Object?>>{
-  AppRoutes.hunter: RouteRegistration<Null>((_, _) => const HunterHomeScreen()),
+  AppRoutes.hunter: RouteRegistration<Null>(
+    (context, _) => _withSession(
+      context,
+      (key, api) => HunterHomeScreen(
+        key: key,
+        loadPlaces: api == null ? null : ApiHunterReader(api).readPlaces,
+      ),
+    ),
+  ),
   hunterAddNewPlaceRoute: RouteRegistration<Null>(
     (_, _) => const AddNewPlaceScreen(),
   ),
@@ -50,43 +60,54 @@ final person2Routes = <String, RouteRegistration<Object?>>{
     (_, module) =>
         LeaderboardHomeScreen(key: ValueKey(module), initialModule: module),
   ),
-  AppRoutes.wallet: RouteRegistration<Null>((context, _) {
-    final services = context
-        .dependOnInheritedWidgetOfExactType<FoundationServices>();
-    if (services == null) return const WalletHomeScreen(embedded: true);
-    final reader = ApiWalletReader(services.api);
-    return ListenableBuilder(
-      listenable: services.session,
-      builder: (context, _) {
-        final state = services.session.state;
-        return WalletHomeScreen(
-          key: ObjectKey(state),
-          embedded: true,
-          reader: state.status == SessionStatus.authenticated ? reader : null,
-          redemption: state.status == SessionStatus.authenticated
-              ? ApiVoucherRedemptionRepository.withMutations(
-                  services.api,
-                  services.session,
-                )
-              : null,
-        );
-      },
-    );
-  }),
+  AppRoutes.wallet: RouteRegistration<Null>(
+    (context, _) => _withSession(context, (key, api) {
+      final services = context
+          .getInheritedWidgetOfExactType<FoundationServices>();
+      return WalletHomeScreen(
+        key: key,
+        embedded: true,
+        reader: api == null ? null : ApiWalletReader(api),
+        redemption: api == null || services == null
+            ? null
+            : ApiVoucherRedemptionRepository(services.api, services.session),
+      );
+    }),
+  ),
   AppRoutes.myHunts: RouteRegistration<Null>(
-    (_, _) => const MyHuntsScreen(
-      history: UnavailableHunterHistory(),
-      demoHistory: kDebugMode ? DemoHunterHistory() : null,
-    ),
+    (context, _) => _withSession(context, (key, api) {
+      final reader = api == null ? null : ApiHunterReader(api);
+      return MyHuntsScreen(
+        key: key,
+        history: reader ?? const UnavailableHunterHistory(),
+        demoHistory: kDebugMode ? const DemoHunterHistory() : null,
+        readStatus: reader?.readStatus,
+      );
+    }),
   ),
   AppRoutes.myGames: RouteRegistration<Null>(
-    (_, _) => const MyGamesScreen(enableDemo: kDebugMode),
+    (context, _) => _withGamesSession(
+      context,
+      (key, reader) => MyGamesScreen(
+        key: key,
+        loadHistory: reader?.readMyGames,
+        enableDemo: kDebugMode,
+      ),
+    ),
   ),
 };
 
 Widget _withGamesSession(
   BuildContext context,
-  Widget Function(Key?, GamesReader?) build,
+  Widget Function(Key?, ApiGamesReader?) build,
+) => _withSession(
+  context,
+  (key, api) => build(key, api == null ? null : ApiGamesReader(api)),
+);
+
+Widget _withSession(
+  BuildContext context,
+  Widget Function(Key?, SessionApi?) build,
 ) {
   final services = context
       .dependOnInheritedWidgetOfExactType<FoundationServices>();
@@ -98,7 +119,7 @@ Widget _withGamesSession(
       return build(
         ValueKey((session, services.api)),
         session.status == SessionStatus.authenticated
-            ? ApiGamesReader(services.api)
+            ? SessionApi(services.api, services.session)
             : null,
       );
     },

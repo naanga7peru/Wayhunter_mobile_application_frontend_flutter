@@ -158,6 +158,11 @@ void main() {
     final harness = _Harness(saved: true);
     final verification = Completer<TransportResponse>();
     harness.transport.respond = (request) {
+      if (request.uri.path == '/api/mobile/hunter/submissions') {
+        expect(request.method, ApiMethod.get);
+        expect(request.headers['Authorization'], 'Bearer $_savedToken');
+        return _json(200, []);
+      }
       if (request.uri.path == walletBalancePath) {
         expect(request.method, ApiMethod.get);
         expect(request.headers['Authorization'], 'Bearer $_savedToken');
@@ -182,7 +187,7 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
     await _tap(tester, 'My Hunts');
-    expect(find.text('Hunt history unavailable'), findsOneWidget);
+    expect(find.text('No hunts yet'), findsOneWidget);
     expect(harness.store.reads, 1);
   });
 
@@ -236,6 +241,8 @@ void main() {
       AppRoutes.games,
       AppRoutes.traveller,
       AppRoutes.wallet,
+      AppRoutes.myHunts,
+      AppRoutes.myGames,
       AppRoutes.leaderboard,
       AppRoutes.profile,
     ]) {
@@ -254,6 +261,11 @@ void main() {
   ) async {
     final harness = _Harness();
     harness.transport.respond = (request) {
+      if (request.uri.path == '/api/mobile/hunter/places') {
+        expect(request.method, ApiMethod.get);
+        expect(request.headers['Authorization'], 'Bearer synthetic-first');
+        return _json(200, []);
+      }
       if (request.uri.path == '/api/mobile/auth/logout') {
         expect(request.headers['Authorization'], 'Bearer synthetic-first');
         return const TransportResponse(503, []);

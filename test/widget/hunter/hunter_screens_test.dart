@@ -1,12 +1,24 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wayhunter_mobile/app/bootstrap/foundation_services.dart';
+import 'package:wayhunter_mobile/app/router/app_router.dart';
+import 'package:wayhunter_mobile/app/router/app_routes.dart';
 import 'package:wayhunter_mobile/app/wayhunter_app.dart';
+import 'package:wayhunter_mobile/core/auth/session_controller.dart';
+import 'package:wayhunter_mobile/core/network/api_client.dart';
+import 'package:wayhunter_mobile/core/storage/credential_store.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_controls.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_states.dart';
 import 'package:wayhunter_mobile/features/hunter/domain/hunter_history.dart';
 import 'package:wayhunter_mobile/features/hunter/presentation/hunter_screens.dart';
+import 'package:wayhunter_mobile/shared/domain/models/navigation_refs.dart';
+
+import '../../foundation/api_client_test.dart' show FakeTransport;
+import '../../foundation/session_and_device_test.dart'
+    show MemoryCredentialStore;
 
 void main() {
   testWidgets('Hunter validates the draft and returns from local review', (
@@ -112,6 +124,97 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('This destination is unavailable.'), findsOneWidget);
   });
+
+  testWidgets(
+    'authenticated Hunter routes retry discovery and refresh owner status',
+    (tester) async {
+      const id = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+      const stamp = '2026-11-26T08:00:00Z';
+      const summary = {
+        'placeName': 'Owned lookout',
+        'district': 'Kandy',
+        'createdAtUtc': stamp,
+        'submittedAtUtc': stamp,
+      };
+      final session = SessionController(MemoryCredentialStore());
+      addTearDown(session.dispose);
+      await session.authenticate(
+        const SessionCredential(
+          user: UserRef('owner-one'),
+          accessToken: 'hunter-route-session',
+        ),
+      );
+      var placesCalls = 0;
+      final transport = FakeTransport((request) async {
+        expect(request.method, ApiMethod.get);
+        expect(request.headers['Authorization'], 'Bearer hunter-route-session');
+        final Object data;
+        switch (request.uri.path) {
+          case '/api/mobile/hunter/places':
+            if (placesCalls++ == 0) return const TransportResponse(503, []);
+            data = [
+              {
+                'submissionId': id,
+                'placeName': 'Published trail',
+                'district': 'Kandy',
+                'latitude': 7,
+                'longitude': 80,
+                'approvedAtUtc': stamp,
+              },
+            ];
+          case '/api/mobile/hunter/submissions':
+            data = [
+              {...summary, 'submissionId': id, 'status': 1},
+            ];
+          case '/api/mobile/hunter/submissions/$id':
+            data = {...summary, 'status': 3};
+          default:
+            fail('Unexpected Hunter endpoint');
+        }
+        return TransportResponse(200, utf8.encode(jsonEncode(data)));
+      });
+      final router = AppRouter((_) {});
+      await tester.pumpWidget(
+        FoundationServices(
+          session: session,
+          api: ApiClient(
+            baseUrl: Uri.https('example.invalid'),
+            transport: transport,
+            tokens: session,
+          ),
+          child: MaterialApp(
+            onGenerateRoute: router.onGenerateRoute,
+            home: Scaffold(
+              body: Builder(
+                builder: (context) =>
+                    router.destination(context, AppRoutes.hunter),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      Future<void> tap(String label) async {
+        final target = find.text(label);
+        await tester.ensureVisible(target);
+        await tester.tap(target);
+        await tester.pumpAndSettle();
+      }
+
+      expect(find.text('Could not load published discoveries'), findsOneWidget);
+      await tap('Retry');
+      expect(find.text('Published trail'), findsOneWidget);
+      await tap('My Hunts');
+      expect(find.text('Pending'), findsOneWidget);
+      await tap('Owned lookout');
+      expect(find.text('Approved'), findsOneWidget);
+      expect(find.text('Pending'), findsNothing);
+      await session.clear();
+      await tester.pumpAndSettle();
+      expect(find.text('Hunt status unavailable'), findsOneWidget);
+      expect(find.text('Owned lookout'), findsNothing);
+    },
+  );
 }
 
 class _RetryHistory implements HunterHistory {
