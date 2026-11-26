@@ -46,7 +46,12 @@ class IdentityApi {
   }
 
   Future<void> resendOtp(String email) async {
-    await _post('resend-otp', {'email': email});
+    await _api.request(
+      ApiMethod.post,
+      [..._identity, 'resend-otp'],
+      jsonBody: {'email': email},
+      expectedSuccessStatus: 202,
+    );
   }
 
   Future<({SessionCredential credential, DateTime expiresAtUtc})> login(

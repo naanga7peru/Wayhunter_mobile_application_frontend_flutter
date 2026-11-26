@@ -19,7 +19,11 @@ class PackageHttpTransport implements HttpTransport {
       final response = await http.Response.fromStream(
         await _client.send(outgoing),
       );
-      return TransportResponse(response.statusCode, response.bodyBytes);
+      return TransportResponse(
+        response.statusCode,
+        response.bodyBytes,
+        retryAfter: response.headers['retry-after'],
+      );
     } on http.ClientException {
       throw const TransportFailure();
     }

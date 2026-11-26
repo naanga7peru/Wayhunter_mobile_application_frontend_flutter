@@ -2,8 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:wayhunter_mobile/core/auth/access_token_source.dart';
 import 'package:wayhunter_mobile/core/network/api_client.dart';
+import 'package:wayhunter_mobile/core/network/package_http_transport.dart';
 
 class FakeTransport implements HttpTransport {
   FakeTransport(this.respond);
@@ -31,6 +34,47 @@ void main() {
       isA<ApiException>()
           .having((value) => value.kind, 'kind', kind)
           .having((value) => value.statusCode, 'status', status);
+
+  test(
+    'forwards only valid numeric Retry-After delays from HTTP 429',
+    () async {
+      var requests = 0;
+      for (final (status, header, expected) in <(int, String?, int?)>[
+        (429, '12', 12),
+        (429, null, null),
+        (429, '0', null),
+        (429, '-1', null),
+        (429, '12, 20', null),
+        (429, 'Thu, 26 Nov 2026 06:00:00 GMT', null),
+        (429, '2147483648', null),
+        (503, '12', null),
+      ]) {
+        final client = MockClient((request) async {
+          requests++;
+          expect(request.method, 'POST');
+          expect(request.followRedirects, isFalse);
+          expect(request.headers, isNot(contains('authorization')));
+          return http.Response('', status, headers: {'retry-after': ?header});
+        });
+        addTearDown(client.close);
+        final api = ApiClient(
+          baseUrl: baseUrl,
+          transport: PackageHttpTransport(client),
+          tokens: const FixedTokenSource('fixture-token'),
+        );
+        await expectLater(
+          api.request(ApiMethod.post, path),
+          throwsA(
+            error(
+              status == 429 ? ApiError.rejected : ApiError.server,
+              status,
+            ).having((value) => value.retryAfterSeconds, 'delay', expected),
+          ),
+        );
+      }
+      expect(requests, 8);
+    },
+  );
 
   test('encodes path, query and JSON and supports all four methods', () async {
     final transport = FakeTransport(

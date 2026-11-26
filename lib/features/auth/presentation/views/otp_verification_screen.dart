@@ -187,7 +187,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
       setState(() {
         if (error is ApiException && error.statusCode == 429) {
-          _beginCountdown(widget.resendCooldownSeconds);
+          _beginCountdown(
+            error.retryAfterSeconds ?? widget.resendCooldownSeconds,
+          );
         }
         _message = authErrorMessage(error);
         _isError = true;
@@ -267,7 +269,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                   if (_secondsRemaining > 0)
                     Text(
                       'Resend code in '
-                      '$_secondsRemaining seconds',
+                      '$_secondsRemaining ${_secondsRemaining == 1 ? 'second' : 'seconds'}',
                       textAlign: TextAlign.center,
                     )
                   else
