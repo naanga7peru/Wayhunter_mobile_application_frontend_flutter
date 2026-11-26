@@ -300,13 +300,9 @@ class _SavedTripDetailsState extends State<SavedTripDetails> {
               moveDown: editable && i + 1 < plan.stops.length
                   ? () => _move(plan, i, i + 1)
                   : null,
-              remove: editable && !plan.hasRowVersion
+              remove: editable
                   ? () => _mutate(() => widget.api.removeStop(plan, stop.id))
                   : null,
-            ),
-          if (plan.hasRowVersion && plan.stops.isNotEmpty)
-            const Text(
-              'Removing saved stops is unavailable for this versioned plan.',
             ),
           WayhunterTextField(
             label: 'Stop name',

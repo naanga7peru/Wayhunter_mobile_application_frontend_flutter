@@ -134,6 +134,35 @@ void main() {
     });
   }
 
+  test(
+    'sends a strong If-Match tag and rejects unsafe header values',
+    () async {
+      final transport = FakeTransport(
+        (_) async => const TransportResponse(204, []),
+      );
+      final api = ApiClient(
+        baseUrl: baseUrl,
+        transport: transport,
+        tokens: const FixedTokenSource('fixture-token'),
+      );
+      await api.request(
+        ApiMethod.delete,
+        path,
+        requiresSession: true,
+        ifMatch: '"AAAAAAAAAAE="',
+      );
+      expect(transport.requests.single.headers['If-Match'], '"AAAAAAAAAAE="');
+
+      for (final value in ['*', 'W/"version"', '"v1", "v2"', '"v1"\r\n']) {
+        await expectLater(
+          api.request(ApiMethod.delete, path, ifMatch: value),
+          throwsArgumentError,
+        );
+      }
+      expect(transport.requests, hasLength(1));
+    },
+  );
+
   test('handles empty and malformed success responses', () async {
     var response = const TransportResponse(204, []);
     final api = ApiClient(

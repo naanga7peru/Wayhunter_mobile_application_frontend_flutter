@@ -25,15 +25,17 @@ class TripPlansApi {
 
   Future<Object?> _request(
     ApiMethod method,
-    List<String> path, [
+    List<String> path, {
     Object? body,
-  ]) async {
+    String? ifMatch,
+  }) async {
     _checkOwner();
     final response = await _api.request(
       method,
       [..._base, ...path],
       requiresSession: true,
       jsonBody: body,
+      ifMatch: ifMatch,
     );
     _checkOwner();
     return response;
@@ -65,12 +67,16 @@ class TripPlansApi {
 
   Future<TripPlan> create(TripInformation info, List<String> stops) async =>
       _decode(
-        await _request(ApiMethod.post, [], {
-          ...info.toJson(),
-          'initialStops': [
-            for (final name in stops) {'name': name},
-          ],
-        }),
+        await _request(
+          ApiMethod.post,
+          [],
+          body: {
+            ...info.toJson(),
+            'initialStops': [
+              for (final name in stops) {'name': name},
+            ],
+          },
+        ),
       );
 
   Future<TripPlan> update(TripPlan current, TripInformation info) async {
@@ -79,7 +85,7 @@ class TripPlansApi {
       await _request(
         ApiMethod.put,
         [_id(current.id)],
-        {...info.toJson(), 'expectedRowVersion': current.rowVersion},
+        body: {...info.toJson(), 'expectedRowVersion': current.rowVersion},
       ),
       current.id,
     );
@@ -93,7 +99,7 @@ class TripPlansApi {
     await _request(
       ApiMethod.post,
       [_id(current.id), 'stops'],
-      {
+      body: {
         'name': name,
         if (current.hasRowVersion) 'expectedRowVersion': current.rowVersion,
       },
@@ -106,7 +112,7 @@ class TripPlansApi {
         await _request(
           ApiMethod.put,
           [_id(current.id), 'stops', 'order'],
-          {
+          body: {
             'stopIds': stopIds.map(_id).toList(),
             if (current.hasRowVersion) 'expectedRowVersion': current.rowVersion,
           },
@@ -114,12 +120,12 @@ class TripPlansApi {
         current.id,
       );
 
-  Future<TripPlan> removeStop(TripPlan current, String stopId) async {
-    // Versioned deletion requires If-Match. The shared client has no header option.
-    if (current.hasRowVersion) throw const ApiException(ApiError.unavailable);
-    return _decode(
-      await _request(ApiMethod.delete, [_id(current.id), 'stops', _id(stopId)]),
-      current.id,
-    );
-  }
+  Future<TripPlan> removeStop(TripPlan current, String stopId) async => _decode(
+    await _request(ApiMethod.delete, [
+      _id(current.id),
+      'stops',
+      _id(stopId),
+    ], ifMatch: current.hasRowVersion ? '"${current.rowVersion}"' : null),
+    current.id,
+  );
 }

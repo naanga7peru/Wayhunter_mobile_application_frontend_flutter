@@ -76,6 +76,8 @@ class ApiClient {
     Map<String, String>? query,
     Object? jsonBody,
     bool requiresSession = false,
+    String? ifMatch,
+    int? expectedSuccessStatus,
   }) async {
     final baseUrl = _baseUrl;
     if (baseUrl == null) throw const ApiException(ApiError.unavailable);
@@ -90,6 +92,12 @@ class ApiClient {
       queryParameters: query,
     );
     final headers = <String, String>{'Accept': 'application/json'};
+    if (ifMatch != null) {
+      if (_strongEntityTag.stringMatch(ifMatch) != ifMatch) {
+        throw ArgumentError('If-Match requires a single strong entity tag.');
+      }
+      headers['If-Match'] = ifMatch;
+    }
     final body = jsonBody == null ? null : jsonEncode(jsonBody);
     if (body != null) {
       headers['Content-Type'] = 'application/json; charset=utf-8';
@@ -123,6 +131,9 @@ class ApiClient {
       };
       throw ApiException(kind, statusCode: status);
     }
+    if (expectedSuccessStatus != null && status != expectedSuccessStatus) {
+      throw ApiException(ApiError.invalidResponse, statusCode: status);
+    }
     if (response.bodyBytes.isEmpty || status == 204) return null;
     try {
       return jsonDecode(utf8.decode(response.bodyBytes));
@@ -151,4 +162,6 @@ class ApiClient {
       segment == '.' ||
       segment == '..' ||
       RegExp(r'[/\\%\x00-\x20\x7F]').hasMatch(segment);
+
+  static final _strongEntityTag = RegExp(r'^"[\x21\x23-\x7e]*"$');
 }

@@ -194,7 +194,7 @@ void main() {
               : const TransportResponse(202, []),
         '$identity/verify-otp' =>
           jsonDecode(request.body!)['code'] == '123456'
-              ? jsonResponse(200, {'verified': true, 'newlyActivated': true})
+              ? const TransportResponse(204, [])
               : jsonResponse(400, {'error': 'invalid_or_expired_otp'}),
         _ => throw StateError('Unexpected route'),
       };
@@ -279,6 +279,19 @@ void main() {
       expect(storage.credential, isNull);
     },
   );
+
+  test('OTP verification rejects an unexpected success status', () async {
+    session = SessionController(storage);
+    transport.respond = (_) => const TransportResponse(200, []);
+    await expectLater(
+      IdentityApi(client()).verifyOtp(email, '123456'),
+      throwsA(
+        isA<ApiException>()
+            .having((e) => e.kind, 'kind', ApiError.invalidResponse)
+            .having((e) => e.statusCode, 'statusCode', 200),
+      ),
+    );
+  });
 
   test('missing login response fields fail closed', () async {
     session = SessionController(storage);
