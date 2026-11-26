@@ -19,10 +19,11 @@ enum ApiError {
 }
 
 class ApiException implements Exception {
-  const ApiException(this.kind, {this.statusCode});
+  const ApiException(this.kind, {this.statusCode, this.retryAfterSeconds});
 
   final ApiError kind;
   final int? statusCode;
+  final int? retryAfterSeconds;
 
   @override
   String toString() => 'ApiException(${kind.name}, status: $statusCode)';
@@ -38,10 +39,11 @@ class TransportRequest {
 }
 
 class TransportResponse {
-  const TransportResponse(this.statusCode, this.bodyBytes);
+  const TransportResponse(this.statusCode, this.bodyBytes, {this.retryAfter});
 
   final int statusCode;
   final List<int> bodyBytes;
+  final String? retryAfter;
 }
 
 class TransportFailure implements Exception {
@@ -135,7 +137,13 @@ class ApiClient {
         >= 500 && < 600 => ApiError.server,
         _ => ApiError.rejected,
       };
-      throw ApiException(kind, statusCode: status);
+      throw ApiException(
+        kind,
+        statusCode: status,
+        retryAfterSeconds: status == 429
+            ? _retryAfterSeconds(response.retryAfter)
+            : null,
+      );
     }
     if (expectedSuccessStatus != null && status != expectedSuccessStatus) {
       throw ApiException(ApiError.invalidResponse, statusCode: status);
@@ -163,6 +171,15 @@ class ApiClient {
     return url;
   }
 
+  static int? _retryAfterSeconds(String? header) {
+    final value = header?.trim();
+    if (value == null || !_delaySeconds.hasMatch(value)) return null;
+    final seconds = int.tryParse(value);
+    return seconds != null && seconds > 0 && seconds <= 0x7fffffff
+        ? seconds
+        : null;
+  }
+
   static bool _invalidSegment(String segment) =>
       segment.isEmpty ||
       segment == '.' ||
@@ -170,4 +187,5 @@ class ApiClient {
       RegExp(r'[/\\%\x00-\x20\x7F]').hasMatch(segment);
 
   static final _strongEntityTag = RegExp(r'^"[\x21\x23-\x7e]*"$');
+  static final _delaySeconds = RegExp(r'^[0-9]+$');
 }

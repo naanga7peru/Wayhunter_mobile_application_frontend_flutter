@@ -185,13 +185,13 @@ void main() {
           'displayName': 'Demo User',
           'requiresOtpVerification': true,
         }),
-        '$identity/resend-otp' =>
-          transport.requests
-                      .where((entry) => entry.uri.path.endsWith('/resend-otp'))
-                      .length ==
-                  1
-              ? const TransportResponse(429, [])
-              : const TransportResponse(202, []),
+        '$identity/resend-otp' => switch (transport.requests
+            .where((entry) => entry.uri.path.endsWith('/resend-otp'))
+            .length) {
+          1 => const TransportResponse(429, [], retryAfter: '12'),
+          2 => const TransportResponse(429, [], retryAfter: 'unknown'),
+          _ => const TransportResponse(202, []),
+        },
         '$identity/verify-otp' =>
           jsonDecode(request.body!)['code'] == '123456'
               ? const TransportResponse(204, [])
@@ -228,11 +228,24 @@ void main() {
       await tap(tester, resend);
       await tester.pumpAndSettle();
       expect(find.textContaining('Too many requests'), findsOneWidget);
+      expect(find.text('Resend code in 12 seconds'), findsOneWidget);
       expect(resend, findsNothing);
+      await tester.pump(const Duration(seconds: 11));
+      expect(find.text('Resend code in 1 second'), findsOneWidget);
+      expect(resend, findsNothing);
+      await tester.pump(const Duration(seconds: 1));
+      expect(
+        transport.requests.where((r) => r.uri.path == '$identity/resend-otp'),
+        hasLength(1),
+      );
+      await tap(tester, resend);
+      await tester.pumpAndSettle();
+      expect(find.text('Resend code in 60 seconds'), findsOneWidget);
       await tester.pump(const Duration(seconds: 60));
       await tap(tester, resend);
       await tester.pumpAndSettle();
       expect(find.text('A new OTP has been requested'), findsOneWidget);
+      expect(find.text('Resend code in 60 seconds'), findsOneWidget);
 
       await tester.enterText(code, '123456');
       await tap(tester, verify);
@@ -292,6 +305,29 @@ void main() {
       ),
     );
   });
+
+  test(
+    'OTP resend accepts HTTP 202 and rejects unrelated success statuses',
+    () async {
+      session = SessionController(storage);
+      final api = IdentityApi(client());
+      transport.respond = (_) => const TransportResponse(204, []);
+      await expectLater(
+        api.resendOtp(email),
+        throwsA(
+          isA<ApiException>()
+              .having((e) => e.kind, 'kind', ApiError.invalidResponse)
+              .having((e) => e.statusCode, 'statusCode', 204),
+        ),
+      );
+      transport.respond = (_) => const TransportResponse(202, []);
+      await api.resendOtp(email);
+      expect(
+        transport.requests.map((r) => r.uri.path),
+        List.filled(2, '$identity/resend-otp'),
+      );
+    },
+  );
 
   test('missing login response fields fail closed', () async {
     session = SessionController(storage);

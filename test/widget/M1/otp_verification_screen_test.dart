@@ -183,7 +183,7 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
 
       expect(
-        find.text('Resend code in 1 seconds'),
+        find.text('Resend code in 1 second'),
         findsOneWidget,
       );
 
