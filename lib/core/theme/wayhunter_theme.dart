@@ -5,15 +5,14 @@ class WayhunterTheme {
   static ThemeData get light {
     final base = ThemeData(
       useMaterial3: true,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: WayhunterColors.primary,
-      ).copyWith(
-        primary: WayhunterColors.primary,
-        surface: WayhunterColors.surface,
-        onSurface: WayhunterColors.ink,
-        onSurfaceVariant: WayhunterColors.mutedInk,
-        error: WayhunterColors.dangerInk,
-      ),
+      colorScheme: ColorScheme.fromSeed(seedColor: WayhunterColors.primary)
+          .copyWith(
+            primary: WayhunterColors.primary,
+            surface: WayhunterColors.surface,
+            onSurface: WayhunterColors.ink,
+            onSurfaceVariant: WayhunterColors.mutedInk,
+            error: WayhunterColors.dangerInk,
+          ),
     );
     final controlShape = RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(WayhunterLayout.controlRadius),
@@ -76,14 +75,18 @@ class WayhunterTheme {
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           minimumSize: const Size(
-              WayhunterLayout.minimumTap, WayhunterLayout.minimumTap),
+            WayhunterLayout.minimumTap,
+            WayhunterLayout.minimumTap,
+          ),
           shape: controlShape,
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           minimumSize: const Size(
-              WayhunterLayout.minimumTap, WayhunterLayout.minimumTap),
+            WayhunterLayout.minimumTap,
+            WayhunterLayout.minimumTap,
+          ),
           shape: controlShape,
         ),
       ),
@@ -91,20 +94,26 @@ class WayhunterTheme {
   }
 
   static ThemeData get dark => ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.dark,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF17C8E6),
-          brightness: Brightness.dark,
-        ),
-        scaffoldBackgroundColor: const Color(0xFF0A1420),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF0A1420),
-          centerTitle: false,
-        ),
-        cardTheme: const CardThemeData(
-          color: Color(0xFF172635),
-          margin: EdgeInsets.symmetric(vertical: 7),
-        ),
-      );
+    useMaterial3: true,
+    brightness: Brightness.dark,
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: const Color(0xFF17C8E6),
+      brightness: Brightness.dark,
+    ),
+    scaffoldBackgroundColor: const Color(0xFF0A1420),
+    appBarTheme: const AppBarTheme(
+      backgroundColor: Color(0xFF0A1420),
+      centerTitle: false,
+    ),
+    inputDecorationTheme: const InputDecorationTheme(
+      filled: true,
+      fillColor: Color(0xFF172635),
+      border: OutlineInputBorder(),
+      errorMaxLines: 3,
+    ),
+    cardTheme: const CardThemeData(
+      color: Color(0xFF172635),
+      margin: EdgeInsets.symmetric(vertical: 7),
+    ),
+  );
 }

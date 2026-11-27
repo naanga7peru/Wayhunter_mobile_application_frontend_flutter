@@ -214,9 +214,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   Widget build(BuildContext context) {
     final busy = _isVerifying || _isResending;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF0A1420),
-      appBar: AppBar(title: const Text('Verify Email')),
+    return AuthDarkScaffold(
+      title: 'Verify Email',
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -253,10 +252,13 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                     decoration: const InputDecoration(
                       labelText: '6-digit OTP',
                       hintText: '000000',
-                      border: OutlineInputBorder(),
                       counterText: '',
                     ),
                   ),
+                  if (_message case final message?) ...[
+                    const SizedBox(height: 12),
+                    AuthFeedback(message, isError: _isError),
+                  ],
                   const SizedBox(height: 20),
                   FilledButton(
                     onPressed: busy ? null : _verifyOtp,
@@ -277,16 +279,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                       onPressed: busy ? null : _resendOtp,
                       child: Text(_isResending ? 'Resending...' : 'Resend OTP'),
                     ),
-                  if (_message != null) ...[
-                    const SizedBox(height: 20),
-                    Text(
-                      _message!,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: _isError ? Colors.redAccent : Colors.greenAccent,
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),
