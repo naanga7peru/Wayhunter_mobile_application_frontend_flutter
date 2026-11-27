@@ -26,6 +26,7 @@ class SignInScreen extends StatefulWidget {
 class _SignInScreenState extends State<SignInScreen> {
   final _email = TextEditingController();
   final _password = TextEditingController();
+  bool _showPassword = false;
 
   @override
   void dispose() {
@@ -38,6 +39,7 @@ class _SignInScreenState extends State<SignInScreen> {
   Widget build(BuildContext context) => AuthForm(
     title: 'Sign In',
     submitLabel: 'Sign In',
+    notice: widget.notice,
     fields: [
       (enabled) => WayhunterTextField(
         label: 'Email',
@@ -46,11 +48,20 @@ class _SignInScreenState extends State<SignInScreen> {
         keyboardType: TextInputType.emailAddress,
         validator: validateAuthEmail,
       ),
-      (enabled) => WayhunterTextField(
-        label: 'Password',
+      (enabled) => TextFormField(
         controller: _password,
         enabled: enabled,
-        obscureText: true,
+        obscureText: !_showPassword,
+        decoration: InputDecoration(
+          labelText: 'Password',
+          suffixIcon: IconButton(
+            tooltip: _showPassword ? 'Hide password' : 'Show password',
+            icon: Icon(_showPassword ? Icons.visibility_off : Icons.visibility),
+            onPressed: enabled
+                ? () => setState(() => _showPassword = !_showPassword)
+                : null,
+          ),
+        ),
         validator: (value) =>
             value?.isNotEmpty == true ? null : 'Enter your password',
       ),
@@ -58,6 +69,7 @@ class _SignInScreenState extends State<SignInScreen> {
     onSubmit: () => widget.onSignIn(_email.text.trim(), _password.text),
     onSuccess: () {
       _password.clear();
+      setState(() => _showPassword = false);
       widget.onSignedIn();
     },
     errorMessage: (error) => switch (error) {
@@ -66,7 +78,6 @@ class _SignInScreenState extends State<SignInScreen> {
       _ => authErrorMessage(error),
     },
     actions: [
-      if (widget.notice case final notice?) (_) => Text(notice),
       (enabled) => TextButton(
         onPressed: enabled ? widget.onRegister : null,
         child: const Text('Create Account'),

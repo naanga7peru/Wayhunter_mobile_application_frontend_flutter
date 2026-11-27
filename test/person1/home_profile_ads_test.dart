@@ -12,6 +12,7 @@ import 'package:wayhunter_mobile/core/widgets/wayhunter_surface.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_states.dart';
 import 'package:wayhunter_mobile/features/advertisements/data/home_advertisements_api.dart';
 import 'package:wayhunter_mobile/features/advertisements/presentation/home_banner.dart';
+import 'package:wayhunter_mobile/features/home/presentation/views/home_screen.dart';
 import 'package:wayhunter_mobile/features/profile/data/my_profile_api.dart';
 import 'package:wayhunter_mobile/shared/domain/models/navigation_refs.dart';
 
@@ -158,6 +159,40 @@ Future<void> _advanceRefresh(WidgetTester tester) async {
 
 void main() {
   const avatarUrl = 'https://images.example.invalid/home-avatar.png';
+
+  testWidgets(
+    'Compact Home preserves the full greeting and scrolls above navigation',
+    (tester) async {
+      const name = 'De Silva De Silva';
+      final h = _Harness()
+        ..mock(profile: () => _json({..._profile(false), 'displayName': name}));
+      await h.open(tester, viewport: const Size(320, 450));
+
+      expect(find.text('Hello, $name'), findsOneWidget);
+      final viewport = find
+          .descendant(
+            of: find.byType(HomeScreen),
+            matching: find.byType(SingleChildScrollView),
+          )
+          .first;
+      final scroll = tester.state<ScrollableState>(
+        find.descendant(of: viewport, matching: find.byType(Scrollable)).first,
+      );
+      expect(scroll.position.maxScrollExtent, greaterThan(0));
+
+      final navigation = find.byType(NavigationBar);
+      final card = find.byType(WayhunterSurfaceCard).first;
+      final lastContent = find.text('No active advertisements');
+      await tester.drag(viewport, const Offset(0, -700));
+      await tester.pumpAndSettle();
+      expect(lastContent.hitTestable(), findsOneWidget);
+      expect(
+        tester.getTopLeft(navigation).dy - tester.getBottomLeft(card).dy,
+        greaterThanOrEqualTo(32),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('Home displays the authenticated avatar beside the greeting', (
     tester,

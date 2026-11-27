@@ -51,9 +51,12 @@ class HomeScreen extends StatelessWidget {
           builder: (context, constraints) => SingleChildScrollView(
             padding: EdgeInsets.fromLTRB(
               WayhunterLayout.pagePadding,
-              (constraints.maxHeight * .35).clamp(96.0, 300.0),
+              (constraints.maxHeight - 320).clamp(
+                64.0,
+                (constraints.maxHeight * .35).clamp(96.0, 300.0),
+              ),
               WayhunterLayout.pagePadding,
-              WayhunterLayout.pagePadding,
+              WayhunterLayout.pagePadding + WayhunterLayout.medium,
             ),
             child: Center(
               child: ConstrainedBox(

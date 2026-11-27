@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:wayhunter_mobile/core/auth/session_controller.dart';
 import 'package:wayhunter_mobile/core/network/api_client.dart';
 import 'package:wayhunter_mobile/core/storage/credential_store.dart';
+import 'package:wayhunter_mobile/core/theme/wayhunter_theme.dart';
 import 'package:wayhunter_mobile/core/theme/wayhunter_tokens.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_controls.dart';
 import 'package:wayhunter_mobile/core/widgets/wayhunter_page.dart';
@@ -24,6 +25,54 @@ String authErrorMessage(Object error) => switch (error) {
   _ => 'Could not complete the request. Try again.',
 };
 
+class AuthDarkScaffold extends StatelessWidget {
+  const AuthDarkScaffold({super.key, required this.title, required this.body});
+
+  final String title;
+  final Widget body;
+
+  @override
+  Widget build(BuildContext context) => Theme(
+    data: WayhunterTheme.dark,
+    child: Scaffold(
+      appBar: AppBar(title: Text(title)),
+      body: body,
+    ),
+  );
+}
+
+class AuthFeedback extends StatelessWidget {
+  const AuthFeedback(this.message, {super.key, this.isError = true});
+
+  final String message;
+  final bool isError;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Semantics(
+      liveRegion: true,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: isError ? colors.errorContainer : colors.secondaryContainer,
+          borderRadius: BorderRadius.circular(WayhunterLayout.controlRadius),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(WayhunterLayout.medium),
+          child: Text(
+            message,
+            style: TextStyle(
+              color: isError
+                  ? colors.onErrorContainer
+                  : colors.onSecondaryContainer,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class AuthForm extends StatefulWidget {
   const AuthForm({
     super.key,
@@ -34,6 +83,7 @@ class AuthForm extends StatefulWidget {
     required this.onSuccess,
     this.actions = const [],
     this.errorMessage = authErrorMessage,
+    this.notice,
   });
 
   final String title;
@@ -43,6 +93,7 @@ class AuthForm extends StatefulWidget {
   final VoidCallback onSuccess;
   final List<Widget Function(bool enabled)> actions;
   final String Function(Object error) errorMessage;
+  final String? notice;
 
   @override
   State<AuthForm> createState() => _AuthFormState();
@@ -83,9 +134,17 @@ class _AuthFormState extends State<AuthForm> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 WayhunterHeader(title: widget.title),
+                if (widget.notice case final notice?) ...[
+                  const SizedBox(height: WayhunterLayout.medium),
+                  AuthFeedback(notice, isError: false),
+                ],
                 for (final field in widget.fields) ...[
                   const SizedBox(height: WayhunterLayout.medium),
                   field(!_busy),
+                ],
+                if (_error case final message?) ...[
+                  const SizedBox(height: WayhunterLayout.medium),
+                  AuthFeedback(message),
                 ],
                 const SizedBox(height: WayhunterLayout.large),
                 WayhunterButton.primary(
@@ -93,8 +152,6 @@ class _AuthFormState extends State<AuthForm> {
                   onPressed: _busy ? null : _submit,
                 ),
                 if (_busy) const WayhunterLoadingView(),
-                if (_error case final message?)
-                  Semantics(liveRegion: true, child: Text(message)),
                 for (final action in widget.actions) action(!_busy),
               ],
             ),

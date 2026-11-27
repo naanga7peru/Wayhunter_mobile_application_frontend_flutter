@@ -85,9 +85,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0A1420),
-      appBar: AppBar(title: const Text('Create Account')),
+    return AuthDarkScaffold(
+      title: 'Create Account',
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -128,7 +127,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       decoration: const InputDecoration(
                         labelText: 'Full Name',
                         prefixIcon: Icon(Icons.person_outline),
-                        border: OutlineInputBorder(),
                       ),
                       validator: (value) {
                         final name = value?.trim() ?? '';
@@ -155,7 +153,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       decoration: const InputDecoration(
                         labelText: 'Email',
                         prefixIcon: Icon(Icons.email_outlined),
-                        border: OutlineInputBorder(),
                       ),
                       validator: (value) {
                         final email = value?.trim() ?? '';
@@ -182,18 +179,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       decoration: InputDecoration(
                         labelText: 'Password',
                         prefixIcon: const Icon(Icons.lock_outline),
-                        border: const OutlineInputBorder(),
                         suffixIcon: IconButton(
+                          tooltip: _showPassword
+                              ? 'Hide password'
+                              : 'Show password',
                           icon: Icon(
                             _showPassword
                                 ? Icons.visibility_off
                                 : Icons.visibility,
                           ),
-                          onPressed: () {
-                            setState(() {
-                              _showPassword = !_showPassword;
-                            });
-                          },
+                          onPressed: _submitting
+                              ? null
+                              : () => setState(
+                                  () => _showPassword = !_showPassword,
+                                ),
                         ),
                       ),
                       validator: (value) {
@@ -219,18 +218,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       decoration: InputDecoration(
                         labelText: 'Confirm Password',
                         prefixIcon: const Icon(Icons.lock_reset),
-                        border: const OutlineInputBorder(),
                         suffixIcon: IconButton(
+                          tooltip: _showConfirmPassword
+                              ? 'Hide confirmation password'
+                              : 'Show confirmation password',
                           icon: Icon(
                             _showConfirmPassword
                                 ? Icons.visibility_off
                                 : Icons.visibility,
                           ),
-                          onPressed: () {
-                            setState(() {
-                              _showConfirmPassword = !_showConfirmPassword;
-                            });
-                          },
+                          onPressed: _submitting
+                              ? null
+                              : () => setState(
+                                  () => _showConfirmPassword =
+                                      !_showConfirmPassword,
+                                ),
                         ),
                       ),
                       validator: (value) {
@@ -246,6 +248,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       },
                     ),
 
+                    if (_error case final message?) ...[
+                      const SizedBox(height: 12),
+                      AuthFeedback(message),
+                    ],
                     const SizedBox(height: 24),
 
                     FilledButton(
@@ -259,8 +265,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         ),
                       ),
                     ),
-                    if (_error case final message?)
-                      Semantics(liveRegion: true, child: Text(message)),
                   ],
                 ),
               ),
